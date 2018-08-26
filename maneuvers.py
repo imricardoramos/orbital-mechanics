@@ -1,5 +1,5 @@
 import numpy as np
-from coordinates import kep2cart
+from coordinates import kep2cart, kep2eq, eq2cart
 from models import atmosDensity, cubesat
 from scipy import integrate
 from constants import constants
@@ -15,17 +15,15 @@ class Maneuvers:
     self.current_v = 0
     self.current_t = 0
 
-    self.rTrace = np.array([])
-    self.vTrace = np.array([])
-    self.tTrace = np.array([])
-
     self.segments = []
 
-    self.com = com
     self.current_r, self.current_v = kep2cart(com)
+
     self.rTrace = self.current_r
     self.vTrace = self.current_v
     self.tTrace = self.current_t
+    self.comTrace = np.array(com)
+    self.equinoctialTrace = np.array(kep2eq(com))
 
   def addSegment(self,segment):
     self.segments.append(segment)
@@ -87,6 +85,43 @@ class Maneuvers:
       return np.append(drdt,dvdt)
     else:
       return np.append(-r,-v)
+  def betts(self,equinoctial_coordinates,t):
+
+    p = equinoctial_coordinates[0]
+    f = equinoctial_coordinates[1]
+    g = equinoctial_coordinates[2]
+    h = equinoctial_coordinates[3]
+    k = equinoctial_coordinates[4]
+    L = equinoctial_coordinates[5]
+
+    q = 1+f*np.cos(L)+g*np.sin(L)
+    s = np.sqrt(1+h**2+k**2)
+    r,v = eq2cart(equinoctial_coordinates)
+    z = np.linalg.norm(r) - constants.Re
+    if t % (60*60*24) < 100:
+      print("equinocitalElements:"+str(equinoctial_coordinates))
+      print("Day:"+str(t/60/60/24)+"\tHeight: "+str(z/1000)+" km")
+
+    #Perturbations in RSW Frame
+    Delta = np.array([0,0,0])
+
+    if self._PERTURBATION_ATMDRAG_:
+      #Atmospheric Drag
+      vrel = v - np.cross(constants.wE,r)
+      Fd = np.array([0,-0.5*atmosDensity(z/1000)*np.linalg.norm(vrel)**2*(1/cubesat.BC),0])
+      Delta = Delta + Fd
+
+
+    A = np.array([[0, 2*p/q*np.sqrt(p/constants.mu_E),0],
+                  [np.sqrt(p/constants.mu_E)*np.sin(L), np.sqrt(p/constants.mu_E)*1/q*((q+1)*np.cos(L)+f), -np.sqrt(p/constants.mu_E)*g/q*(h*np.sin(L)-k*np.cos(L))],
+                  [-np.sqrt(p/constants.mu_E)*np.cos(L), np.sqrt(p/constants.mu_E)*(1/q)*((q+1)*np.sin(L)+g), np.sqrt(p/constants.mu_E)*(f/q)*(h*np.sin(L)-k*np.cos(L))],
+                  [0, 0, np.sqrt(p/constants.mu_E)*s**2*np.cos(L)/(2*q)],
+                  [0, 0, np.sqrt(p/constants.mu_E)*s**2*np.sin(L)/(2*q)],
+                  [0, 0, np.sqrt(p/constants.mu_E)*(1/q)*(h*np.sin(L)-k*np.cos(L))]])
+    b = np.array([0, 0, 0, 0, 0, np.sqrt(constants.mu_E*p)*(q/p)**2])
+
+    dotx = np.matmul(A,Delta) + b
+    return dotx
 
   def propagate(self,time):
     print("Propagating...from day ",self.current_t/60/60/24," to ",(self.current_t+time)/60/60/24)
@@ -101,6 +136,22 @@ class Maneuvers:
     # Update last values
     self.current_r = self.rTrace[-1,:]
     self.current_v = self.vTrace[-1,:]
+    self.current_t = self.current_t+time
+
+  def propagate2(self,time):
+    #Integrate
+    y0 = kep2eq(self.comTrace)
+    t = np.linspace(self.current_t,self.current_t+time,time/60)
+    y = integrate.odeint(self.betts,y0,t)
+    # Update traces
+    self.tTrace = np.append(self.tTrace,t)
+    self.equinoctialTrace = np.vstack((self.equinoctialTrace,y))
+    for idx,row in enumerate(self.equinoctialTrace):
+      perc = idx/self.equinoctialTrace.shape[0]*100
+      if perc-np.floor(perc) < 0.001:
+        print("Perc:"+str(perc))
+      r,v = eq2cart(row)
+      self.rTrace = np.vstack((self.rTrace,r))
     self.current_t = self.current_t+time
 
   def impulsive_maneuver(self,dv):

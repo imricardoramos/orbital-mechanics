@@ -9,10 +9,10 @@ def kep2cart(com):
     omega = com[3]
     Omega = com[4]
     M0 = com[5]
-    t = com[6]
     mu = constants.mu_E
 
-    t0=0
+    t = 0
+    t0 = 0
     deltat = 86400*(t-t0)
     M = M0+deltat*(mu/a**3)**0.5
     
@@ -46,25 +46,43 @@ def cart2kep(r,v):
 
     return a,e
 
-def kep2eq(a,e,i,omega,Omega,nu):
+def kep2eq(com):
   """ Keplerian to Equinoctial """
+  a = com[0]
+  e = com[1]
+  i = com[2]
+  omega = com[3]
+  Omega = com[4]
+  nu = com[5]
+
   p = a*(1-e**2)
   f = e*np.cos(omega+Omega)
   g = e*np.sin(omega+Omega)
-  h = np.tan(i/2)*np.cos(omega)
-  k = np.tan(i/2)*np.sin(omega)
+  h = np.tan(i/2)*np.cos(Omega)
+  k = np.tan(i/2)*np.sin(Omega)
   L = omega+Omega+nu
 
-  return [p,f,g,h,k,L]
+  return np.array([p,f,g,h,k,L])
 
-def eq2cart(p,f,g,h,k,L):
+def eq2cart(eqcom):
   """ Equinoctial to Cartesian """
-  alpha = np.sqrt(h**2-k**2)
-  s = np.sqrt(1+h**2+k**2)
+  p = eqcom[0]
+  f = eqcom[1]
+  g = eqcom[2]
+  h = eqcom[3]
+  k = eqcom[4]
+  L = eqcom[5]
+
+  alpha2 = h**2-k**2
+  s2 = 1+h**2+k**2
   w = 1+f*np.cos(L)+g*np.sin(L)
   r = p/w
-  x = (r/s**2)*(np.cos(L)+alpha**2*np.cos(L)+2*h*k*np.sin(L))
-  y = (r/s**2)*(np.sin(L)+alpha**2*np.sin(L)+2*h*k*np.cos(L))
-  z = (r/s**2)*(h*np.sin(L)-k*np.cos(L))
 
-  return [x,y,z]
+  r = np.array([(r/s2)*(np.cos(L)+alpha2*np.cos(L)+2*h*k*np.sin(L)),
+                (r/s2)*(np.sin(L)-alpha2*np.sin(L)+2*h*k*np.cos(L)),
+                (2*r/s2)*(h*np.sin(L)-k*np.cos(L))])
+  v = np.array([-1/s2*np.sqrt(constants.mu_E/p)*((1+alpha2)*(np.sin(L)+g)-2*h*k*(np.cos(L)+f)),
+                -1/s2*np.sqrt(constants.mu_E/p)*((alpha2-1)*(np.cos(L)+f)+2*h*k*(np.sin(L)+g)),
+                2/s2*np.sqrt(constants.mu_E/p)*(h*(np.cos(L)+f)+k*(np.sin(L)+g))])
+
+  return r,v
