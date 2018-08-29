@@ -1,12 +1,14 @@
 import numpy as np
 from coordinates import kep2cart, kep2eq, eq2cart
-from models import atmosDensity
+import models
 from scipy import integrate
 from constants import constants
+from datetime import timedelta
 
 class ManeuversHistory:
   def __init__(self):
     self.t = [0]
+    self.datetime = None 
     self.r = None
     self.v = None
     self.coe = None
@@ -17,7 +19,7 @@ class ManeuversHistory:
 
 class Maneuvers:
 
-  def __init__(self,coe,spacecraft):
+  def __init__(self,coe,spacecraft,startDate):
 
     #Perturbation Flags
     self._PERTURBATION_ATMDRAG_ = 0
@@ -28,6 +30,7 @@ class Maneuvers:
     self._PERTURBATION_SUN_ = 0
 
     self.spacecraft = spacecraft
+    self.startDate = startDate
 
     # Set up history to store data along maneuvers
     self.history = ManeuversHistory()
@@ -36,7 +39,7 @@ class Maneuvers:
     self.history.mee = np.array(kep2eq(coe))
     self.history.mee.shape = (1,6)
     self.history.propMass = [self.spacecraft.wetMass-self.spacecraft.dryMass]
-
+    self.history.datetime = startDate
 
   def addPerturbation(self,perturbation):
     if perturbation == "atmosphere":
@@ -78,7 +81,7 @@ class Maneuvers:
       if self._PERTURBATION_ATMDRAG_:
         #Atmospheric Drag
         vrel = v - np.cross(constants.wE,r)
-        Fd = -0.5*atmosDensity(z/1000)*np.linalg.norm(vrel)*vrel*(1/self.spacecraft.BC())
+        Fd = -0.5*models.atmosDensity(z/1000)*np.linalg.norm(vrel)*vrel*(1/self.spacecraft.BC(spacecraft.dryMass+propMass))
         p = p + Fd
       if self._PERTURBATION_J2_:
         J2 = 0.00108263
@@ -147,7 +150,7 @@ class Maneuvers:
     if self._PERTURBATION_ATMDRAG_:
       #Atmospheric Drag
       vrel = v - np.cross(constants.wE,r)
-      Fd = -0.5*atmosDensity(z/1000)*np.linalg.norm(vrel)*vrel*(1/self.spacecraft.BC())
+      Fd = -0.5*models.atmosDensity(z/1000)*np.linalg.norm(vrel)*vrel*(1/self.spacecraft.BC(spacecraft.dryMass+propMass))
 
     if self._PERTURBATION_J2_:
       J2 = 0.00108263
@@ -181,12 +184,21 @@ class Maneuvers:
       Delta = Delta + np.dot(rsw,FR)
 
     if self._PERTURBATION_MOON_:
+      r_m = models.lunarPositionAlmanac2013(self.startDate+timedelta(minutes=t))
+      r_ms = r_m-r 
       pMoon = constants.mu_M*(r_ms/np.linalg.norm(r_ms)**3-r_m/np.linalg.norm(r_m)**3)
-      p = p + pMoon
+      Delta = Delta + np.dot(rsw,pMoon)
 
     if self._PERTURBATION_SUN_:
-      pSun = constants.mu_S/rSunSat**3*(Fq*r-r)
-      p = p + pSun
+      r_s = models.solarPosition(self.startDate+timedelta(minutes=t))
+      r_sunSat = r_s-r 
+      #F(q) formula from F.3 Appendix Curtis 2013
+      # 	c = b - a; a << b
+      # 	F = 1 - c**3/b**2
+      qq = 1-r_sunSat**2/r_s**2
+      Fq = (qq**2 - 3*qq + 3)*qq/(1+(1-qq)**(3/2))
+      pSun = constants.mu_S/r_sunSat**3*(Fq*r_s-r)
+      Delta = Delta + np.dot(rsw,pSun)
 
     if self._PERTURBATION_THRUST_:
       #Thrust in speed direction
@@ -245,6 +257,8 @@ class Maneuvers:
       rLocalHist[idx,:] = r
       vLocalHist[idx,:] = v
 
+    datetime = np.array([self.startDate + timedelta(minutes=minutes) for minutes in t])
+
     # Update history
     self.history.t   = np.append(self.history.t,t)
     self.history.mee = np.vstack((self.history.mee,y))
@@ -252,6 +266,7 @@ class Maneuvers:
     self.history.v   = np.vstack((self.history.v,vLocalHist))
     self.history.maneuverIdxs.append(len(self.history.t))
     self.history.propMass = np.append(self.history.propMass,propMass)
+    self.history.datetime = np.append(self.history.datetime,datetime)
   def impulsive_maneuver(self,dv):
     self.current_v = self.current_v+dv
 

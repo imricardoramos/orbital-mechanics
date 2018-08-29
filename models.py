@@ -12,7 +12,7 @@ def atmosDensity(z):
         i = 27
     density = rho[i]*np.exp(-(z-h[i])/H[i]);
     return density
-def lunarMotionAlmanac2013(year,month,day,UT):
+def lunarPositionAlmanac2013(date):
   #Coefficients for Computing Lunar Position (Table 12.1 Curtis)
   a = [0, 6.29, -1.27, 0.66, 0.21, -0.19, -0.11]
   b = [218.32, 135.0, 259.3, 235.7, 269.9, 357.5, 106.5]
@@ -23,6 +23,11 @@ def lunarMotionAlmanac2013(year,month,day,UT):
   g = [0.9508, 0.0518, 0.0095, 0.0078, 0.0028, 0, 0]
   h = [0, 135.0, 259.3, 253.7, 269.9, 0, 0]
   k = [0, 477198.87, -413335.38, 890534.22, 954397.70, 0, 0]
+
+  year = date.year
+  month = date.month
+  day = date.day
+  UT = date.hour+date.minute/60
   #Julian Day
   J0 = 367*year-int(7*(year+int((month+9)/12))/4)+int(275*month/9)+day+1721013.5
   JD = J0+UT/24
@@ -54,13 +59,56 @@ def lunarMotionAlmanac2013(year,month,day,UT):
                      rm*np.cos(epsilon)*np.cos(delta)*np.sin(lambd) - np.sin(epsilon)*np.sin(delta),
                      rm*np.sin(epsilon)*np.cos(delta)*np.sin(lambd) + np.cos(epsilon)*np.sin(delta)])
   return rmVect
+def solarPosition(date):
+  year = date.year
+  month = date.month
+  day = date.day
+  UT = date.hour+date.minute/60
+  #Julian Day
+  J0 = 367*year-int(7*(year+int((month+9)/12))/4)+int(275*month/9)+day+1721013.5
+  JD = J0+UT/24
+
+  # Astronomical unit (km):
+  AU = 149597870.691
+
+  # Julian days since J2000:
+  n = JD - 2451545
+  # Julian centuries since J2000:
+  cy = n/36525
+
+  # Mean anomaly (deg):
+  M = 357.528 + 0.9856003*n
+  M = M % 360
+  M = M*np.pi/180
+  # Mean longitude (deg):
+  L = 280.460 + 0.98564736*n
+  L = L % 360
+  L = L*np.pi/180
+  # Apparent ecliptic longitude (deg):
+  lamda = L + 1.915*np.sin(M) + 0.020*np.sin(2*M)
+  lamda = lamda % 360
+  lamda = lamda*np.pi/180
+  # Obliquity of the ecliptic (deg):
+  eps = 23.439 - 0.0000004*n
+  eps = eps*np.pi/180
+  # Unit vector from earth to sun:
+  u = np.array([np.cos(lamda),
+                np.sin(lamda)*np.cos(eps),
+                np.sin(lamda)*np.sin(eps)])
+  # Distance from earth to sun (km):
+  rS = (1.00014 - 0.01671*np.cos(M) - 0.000140*np.cos(2*M))*AU
+  # Distance from earth to sun (m):
+  rS = rS*1e3
+  # Geocentric position vector (km):
+  r_S = rS*u;
   
+  return r_S
 
 class Thruster:
   #ISP = 720s
   isp = 720
   #Trust = 1N
-  thrust = 1e-3
+  thrust = 5e-2
 
   #Calculated mass flow rate (kg/s)
   massFlowRate = thrust/(isp*constants.g0)
@@ -72,9 +120,9 @@ class Spacecraft:
     self.area = area
     self.thruster = Thruster()
 
-  def BC(self):
+  def BC(self,wetMass):
     Cd = 2.2
-    return self.wetMass/(Cd*self.area)
+    return wetMass/(Cd*self.area)
 
 class CurtisSat(Spacecraft):
   def __init__(self):
