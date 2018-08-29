@@ -1,14 +1,14 @@
 import numpy as np
 from constants import constants
 
-def kep2cart(com):
+def kep2cart(coe):
     """ Keplerian to Cartesian """
-    a = com[0]
-    e = com[1]
-    i = com[2]
-    omega = com[3]
-    Omega = com[4]
-    M0 = com[5]
+    a = coe[0]
+    e = coe[1]
+    i = coe[2]
+    omega = coe[3]
+    Omega = coe[4]
+    M0 = coe[5]
     mu = constants.mu_E
 
     t = 0
@@ -46,14 +46,14 @@ def cart2kep(r,v):
 
     return a,e
 
-def kep2eq(com):
+def kep2eq(coe):
   """ Keplerian to Equinoctial """
-  a = com[0]
-  e = com[1]
-  i = com[2]
-  omega = com[3]
-  Omega = com[4]
-  nu = com[5]
+  a = coe[0]
+  e = coe[1]
+  i = coe[2]
+  omega = coe[3]
+  Omega = coe[4]
+  nu = coe[5]
 
   p = a*(1-e**2)
   f = e*np.cos(omega+Omega)
@@ -64,14 +64,14 @@ def kep2eq(com):
 
   return np.array([p,f,g,h,k,L])
 
-def eq2cart(eqcom):
+def eq2cart(mee):
   """ Equinoctial to Cartesian """
-  p = eqcom[0]
-  f = eqcom[1]
-  g = eqcom[2]
-  h = eqcom[3]
-  k = eqcom[4]
-  L = eqcom[5]
+  p = mee[0]
+  f = mee[1]
+  g = mee[2]
+  h = mee[3]
+  k = mee[4]
+  L = mee[5]
 
   alpha2 = h**2-k**2
   s2 = 1+h**2+k**2
@@ -86,3 +86,4 @@ def eq2cart(eqcom):
                 2/s2*np.sqrt(constants.mu_E/p)*(h*(np.cos(L)+f)+k*(np.sin(L)+g))])
 
   return r,v
+

@@ -1,4 +1,5 @@
 import numpy as np
+from constants import constants
 def atmosDensity(z):
     i=0
     h = [ 0, 25, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130, 140, 150, 180, 200, 250, 300, 350, 400, 450, 500, 600, 700, 800, 900, 1000];
@@ -11,15 +12,83 @@ def atmosDensity(z):
         i = 27
     density = rho[i]*np.exp(-(z-h[i])/H[i]);
     return density
-class curtisSat:
-  m = 100
-  A = np.pi/4
-  Cd = 2.2
-  BC = m/(Cd*A)
-class cubesat:
-  #Satellite Data
-  m = 3
-  dimensions = [10e-2,10e-2,30e-2]
-  A = dimensions[0]*dimensions[1]
-  Cd = 2.2
-  BC = m/(Cd*A)
+def lunarMotionAlmanac2013(year,month,day,UT):
+  #Coefficients for Computing Lunar Position (Table 12.1 Curtis)
+  a = [0, 6.29, -1.27, 0.66, 0.21, -0.19, -0.11]
+  b = [218.32, 135.0, 259.3, 235.7, 269.9, 357.5, 106.5]
+  c = [481267.881, 477198.87, -413335.36, 890534.22, 954397.74, 35999.05, 966404.03]
+  d = [0, 5.13, 0.28, -0.28, -0.17, 0, 0]
+  e = [0, 93.3, 220.2, 318.3, 217.6, 0, 0]
+  f = [0, 483202.03, 960400.89, 6003.13, -407332.21, 0, 0]
+  g = [0.9508, 0.0518, 0.0095, 0.0078, 0.0028, 0, 0]
+  h = [0, 135.0, 259.3, 253.7, 269.9, 0, 0]
+  k = [0, 477198.87, -413335.38, 890534.22, 954397.70, 0, 0]
+  #Julian Day
+  J0 = 367*year-int(7*(year+int((month+9)/12))/4)+int(275*month/9)+day+1721013.5
+  JD = J0+UT/24
+  #Julian Centuries
+  T0 = (JD-2451545)/36525
+  #Obliquiy (in deg)
+  epsilon = 23.439 - 0.0130042*T0
+  epsilon = epsilon*np.pi/180
+  #Lunar Ecliptic Longitude
+  sums = 0
+  for i in range(1,7):
+    sums = sums + a[i]*np.sin(b[i]+c[i]*T0)
+  lambd = b[0]+c[0]*T0+sums
+  lambd = lambd*np.pi/180
+  #Lunar Ecliptic Latitude
+  delta = 0
+  for i in range(1,5):
+    delta = d[i]*np.sin(e[i]+f[i]*T0)
+  delta = delta*np.pi/180
+  #Horizontal Parallax
+  sums = 0
+  for i in range(1,5):
+    sums = sums + g[i]*np.cos(h[i]+k[i]*T0)
+  HP = g[0] + sums
+  HP = HP*np.pi/180
+
+  rm = constants.Re/np.sin(HP)
+  rmVect = np.array([rm*np.cos(delta)*np.cos(lambd),
+                     rm*np.cos(epsilon)*np.cos(delta)*np.sin(lambd) - np.sin(epsilon)*np.sin(delta),
+                     rm*np.sin(epsilon)*np.cos(delta)*np.sin(lambd) + np.cos(epsilon)*np.sin(delta)])
+  return rmVect
+  
+
+class Thruster:
+  #ISP = 720s
+  isp = 720
+  #Trust = 1N
+  thrust = 1e-3
+
+  #Calculated mass flow rate (kg/s)
+  massFlowRate = thrust/(isp*constants.g0)
+
+class Spacecraft:
+  def __init__(self,wetMass,dryMass,area):
+    self.wetMass = wetMass
+    self.dryMass = dryMass
+    self.area = area
+    self.thruster = Thruster()
+
+  def BC(self):
+    Cd = 2.2
+    return self.wetMass/(Cd*self.area)
+
+class CurtisSat(Spacecraft):
+  def __init__(self):
+    m = 100
+    A = np.pi/4
+    BC = m/(Cd*A)
+
+    Spacecraft.__init__(self,m,m,A)
+
+class Cubesat(Spacecraft):
+  def __init__(self):
+    #Spacecraft Data
+    totalMass = 3
+    propellantMass = 1
+    dimensions = [10e-2,10e-2,30e-2]
+    A = dimensions[0]*dimensions[1]
+    Spacecraft.__init__(self,totalMass,totalMass-propellantMass,A)

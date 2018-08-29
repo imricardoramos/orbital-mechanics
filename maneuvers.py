@@ -1,32 +1,42 @@
 import numpy as np
 from coordinates import kep2cart, kep2eq, eq2cart
-from models import atmosDensity, cubesat
+from models import atmosDensity
 from scipy import integrate
 from constants import constants
 
+class ManeuversHistory:
+  def __init__(self):
+    self.t = [0]
+    self.r = None
+    self.v = None
+    self.coe = None
+    self.mee = None
+    self.propMass = None
+    self.dv = None
+    self.maneuverIdxs = [0]
+
 class Maneuvers:
 
-  def __init__(self,com):
+  def __init__(self,coe,spacecraft):
+
+    #Perturbation Flags
     self._PERTURBATION_ATMDRAG_ = 0
     self._PERTURBATION_J2_ = 0
     self._PERTURBATION_SOLARPRESS_ = 0
+    self._PERTURBATION_THRUST_ = 0
+    self._PERTURBATION_MOON_ = 0
+    self._PERTURBATION_SUN_ = 0
 
-    self.current_r = 0 
-    self.current_v = 0
-    self.current_t = 0
+    self.spacecraft = spacecraft
 
-    self.segments = []
+    # Set up history to store data along maneuvers
+    self.history = ManeuversHistory()
+    self.history.r, self.history.v = kep2cart(coe)
+    self.history.coe = np.array(coe)
+    self.history.mee = np.array(kep2eq(coe))
+    self.history.mee.shape = (1,6)
+    self.history.propMass = [self.spacecraft.wetMass-self.spacecraft.dryMass]
 
-    self.current_r, self.current_v = kep2cart(com)
-
-    self.rTrace = self.current_r
-    self.vTrace = self.current_v
-    self.tTrace = self.current_t
-    self.comTrace = np.array(com)
-    self.equinoctialTrace = np.array(kep2eq(com))
-
-  def addSegment(self,segment):
-    self.segments.append(segment)
 
   def addPerturbation(self,perturbation):
     if perturbation == "atmosphere":
@@ -35,6 +45,26 @@ class Maneuvers:
       self._PERTURBATION_J2_ = 1
     if perturbation == "solar_pressure":
       self._PERTURBATION_SOLARPRESS_ = 1
+    if perturbation == "thrust":
+      self._PERTURBATION_THRUST_ = 1
+    if perturbation == "moon":
+      self._PERTURBATION_MOON_ = 1
+    if perturbation == "sun":
+      self._PERTURBATION_SUN_ = 1
+
+  def removePerturbation(self,perturbation):
+    if perturbation == "atmosphere":
+      self._PERTURBATION_ATMDRAG_ = 0
+    if perturbation == "J2":
+      self._PERTURBATION_J2_ = 0
+    if perturbation == "solar_pressure":
+      self._PERTURBATION_SOLARPRESS_ = 0
+    if perturbation == "thrust":
+      self._PERTURBATION_THRUST_ = 0
+    if perturbation == "moon":
+      self._PERTURBATION_MOON_ = 0
+    if perturbation == "sun":
+      self._PERTURBATION_SUN_ = 0
 
   def conwell(self, stateVector,t):
     r = stateVector[0:3]
@@ -48,7 +78,7 @@ class Maneuvers:
       if self._PERTURBATION_ATMDRAG_:
         #Atmospheric Drag
         vrel = v - np.cross(constants.wE,r)
-        Fd = -0.5*atmosDensity(z/1000)*np.linalg.norm(vrel)*vrel*(1/cubesat.BC)
+        Fd = -0.5*atmosDensity(z/1000)*np.linalg.norm(vrel)*vrel*(1/self.spacecraft.BC())
         p = p + Fd
       if self._PERTURBATION_J2_:
         J2 = 0.00108263
@@ -68,11 +98,11 @@ class Maneuvers:
         #Solar Radiation Pressure
         PSR = 4.56e-6
         #Absorbing Area
-        As = np.pi*(cubesat.dimensions[0]/2)**2
+        As = self.spacecraft.area
         #Shadow function TODO
         nu = 1
         #Radiation Pressure
-        FR = -nu*PSR*CR*As/cubesat.mass
+        FR = -nu*PSR*CR*As/self.spacecraft.mass
         p = p + FR
       
       E = np.linalg.norm(v)**2/2-constants.mu_E/np.linalg.norm(r)
@@ -85,8 +115,8 @@ class Maneuvers:
       return np.append(drdt,dvdt)
     else:
       return np.append(-r,-v)
-  def betts(self,equinoctial_coordinates,t):
-
+  def betts(self,y,t):
+    equinoctial_coordinates = y[0:6]
     p = equinoctial_coordinates[0]
     f = equinoctial_coordinates[1]
     g = equinoctial_coordinates[2]
@@ -94,13 +124,22 @@ class Maneuvers:
     k = equinoctial_coordinates[4]
     L = equinoctial_coordinates[5]
 
+    propMass = y[6]
+
     q = 1+f*np.cos(L)+g*np.sin(L)
     s = np.sqrt(1+h**2+k**2)
     r,v = eq2cart(equinoctial_coordinates)
     z = np.linalg.norm(r) - constants.Re
     if t % (60*60*24) < 100:
-      print("equinocitalElements:"+str(equinoctial_coordinates))
-      print("Day:"+str(t/60/60/24)+"\tHeight: "+str(z/1000)+" km")
+      #print("equinocitalElements:"+str(equinoctial_coordinates))
+      print("Day:"+str(t/60/60/24)+"\tHeight: "+str(z/1000)+" km"+"\tMass: "+str(propMass))
+
+    #RSW frame definition from r and v
+    rhat = r/np.linalg.norm(r)
+    w = np.cross(rhat,v)
+    what = w/np.linalg.norm(w)
+    shat = np.cross(what,rhat)
+    rsw = [rhat, shat, what]
 
     #Perturbations in RSW Frame
     Delta = np.array([0,0,0])
@@ -108,8 +147,59 @@ class Maneuvers:
     if self._PERTURBATION_ATMDRAG_:
       #Atmospheric Drag
       vrel = v - np.cross(constants.wE,r)
-      Fd = np.array([0,-0.5*atmosDensity(z/1000)*np.linalg.norm(vrel)**2*(1/cubesat.BC),0])
-      Delta = Delta + Fd
+      Fd = -0.5*atmosDensity(z/1000)*np.linalg.norm(vrel)*vrel*(1/self.spacecraft.BC())
+
+    if self._PERTURBATION_J2_:
+      J2 = 0.00108263
+
+      zz = r[2]
+
+      rNorm = np.linalg.norm(r)
+      bigTerm = np.array([1/rNorm*(5*zz**2/rNorm**2-1),
+                          1/rNorm*(5*zz**2/rNorm**2-1),
+                          1/rNorm*(5*zz**2/rNorm**2-3)])
+
+      #J2 Gravity Gradient
+      FJ2 = (3/2)*J2*constants.mu_E*constants.Re**2/rNorm**4*bigTerm*r
+      Delta = Delta + np.dot(rsw,FJ2)
+
+    if self._PERTURBATION_SOLARPRESS_:
+      #Solar Radiation Pressure
+      PSR = 4.56e-6
+      #Absorbing Area
+      As = self.spacecraft.area
+      #Shadow function TODO
+      nu = 1
+      #Radiation Pressure Coefficient (lies between 0 and 1)
+      CR = 0.5
+      #Spacecraft mass
+      mass = self.spacecraft.dryMass+propMass
+      #u-hat vector pointing from Sun to Earth
+      uhat = np.array([1,0,0])
+      #Radiation Pressure acceleration
+      FR = -nu*PSR*CR*As/mass*uhat
+      Delta = Delta + np.dot(rsw,FR)
+
+    if self._PERTURBATION_MOON_:
+      pMoon = constants.mu_M*(r_ms/np.linalg.norm(r_ms)**3-r_m/np.linalg.norm(r_m)**3)
+      p = p + pMoon
+
+    if self._PERTURBATION_SUN_:
+      pSun = constants.mu_S/rSunSat**3*(Fq*r-r)
+      p = p + pSun
+
+    if self._PERTURBATION_THRUST_:
+      #Thrust in speed direction
+      Fth = self.spacecraft.thruster.thrust*v/np.linalg.norm(v)
+      #Thrust in out-of-plane direction
+      #Delta = Delta + [0,0,self.spacecraft.thruster.thrust/self.spacecraft.wetMass]
+
+      mass = self.spacecraft.dryMass+propMass
+      dpropMass = -self.spacecraft.thruster.massFlowRate
+      
+      Delta = Delta + np.dot(rsw,Fth/mass)
+    else:
+      dpropMass = 0
 
 
     A = np.array([[0, 2*p/q*np.sqrt(p/constants.mu_E),0],
@@ -121,39 +211,47 @@ class Maneuvers:
     b = np.array([0, 0, 0, 0, 0, np.sqrt(constants.mu_E*p)*(q/p)**2])
 
     dotx = np.matmul(A,Delta) + b
-    return dotx
+    return np.append(dotx,dpropMass)
 
   def propagate(self,time):
-    print("Propagating...from day ",self.current_t/60/60/24," to ",(self.current_t+time)/60/60/24)
+    print("Propagating...from day ",self.history.t[-1]/60/60/24," to ",(self.history.t[-1]+time)/60/60/24)
     #Integrate
-    y0 = np.append(self.current_r,self.current_v)
-    t = np.linspace(self.current_t,self.current_t+time,time/60)
+    y0 = np.append(self.history.r[-1,:],self.history.v[-1,:])
+    t = np.linspace(self.history.t[-1],self.history.t[-1]+time,time/60)
     y = integrate.odeint(self.conwell,y0,t)
-    # Update traces
-    self.tTrace = np.append(self.tTrace,t)
-    self.rTrace = np.vstack((self.rTrace, y[:,0:3]))
-    self.vTrace = np.vstack((self.vTrace, y[:,3:6]))
-    # Update last values
-    self.current_r = self.rTrace[-1,:]
-    self.current_v = self.vTrace[-1,:]
-    self.current_t = self.current_t+time
+    # Update history
+    self.history.t = np.append(self.history.t,t)
+    self.history.r = np.vstack((self.history.r, y[:,0:3]))
+    self.history.v = np.vstack((self.history.v, y[:,3:6]))
 
   def propagate2(self,time):
+    print("Propagating...from day ",self.history.t[-1]/60/60/24," to ",(self.history.t[-1]+time)/60/60/24)
     #Integrate
-    y0 = kep2eq(self.comTrace)
-    t = np.linspace(self.current_t,self.current_t+time,time/60)
-    y = integrate.odeint(self.betts,y0,t)
-    # Update traces
-    self.tTrace = np.append(self.tTrace,t)
-    self.equinoctialTrace = np.vstack((self.equinoctialTrace,y))
-    for idx,row in enumerate(self.equinoctialTrace):
-      perc = idx/self.equinoctialTrace.shape[0]*100
-      if perc-np.floor(perc) < 0.001:
+    y0 = np.append(self.history.mee[-1,:],self.history.propMass[-1])
+    t = np.linspace(self.history.t[-1],self.history.t[-1]+time,time/60)
+    yp = integrate.odeint(self.betts,y0,t)
+    y = yp[:,0:6] 
+    propMass = yp[:,6]
+
+    #Initialize r and v for faster stacking
+    rLocalHist = np.zeros([y.shape[0],3])
+    vLocalHist = np.zeros([y.shape[0],3])
+
+    for idx,row in enumerate(y):
+      perc = idx/y.shape[0]*100
+      if perc % 10 < 0.001:
         print("Perc:"+str(perc))
       r,v = eq2cart(row)
-      self.rTrace = np.vstack((self.rTrace,r))
-    self.current_t = self.current_t+time
+      rLocalHist[idx,:] = r
+      vLocalHist[idx,:] = v
 
+    # Update history
+    self.history.t   = np.append(self.history.t,t)
+    self.history.mee = np.vstack((self.history.mee,y))
+    self.history.r   = np.vstack((self.history.r,rLocalHist))
+    self.history.v   = np.vstack((self.history.v,vLocalHist))
+    self.history.maneuverIdxs.append(len(self.history.t))
+    self.history.propMass = np.append(self.history.propMass,propMass)
   def impulsive_maneuver(self,dv):
     self.current_v = self.current_v+dv
 
