@@ -50,9 +50,9 @@ class Maneuvers:
       self._PERTURBATION_SOLARPRESS_ = 1
     if perturbation == "thrust":
       self._PERTURBATION_THRUST_ = 1
-    if perturbation == "moon":
+    if perturbation == "moon_gravity":
       self._PERTURBATION_MOON_ = 1
-    if perturbation == "sun":
+    if perturbation == "sun_gravity":
       self._PERTURBATION_SUN_ = 1
 
   def removePerturbation(self,perturbation):
@@ -64,9 +64,9 @@ class Maneuvers:
       self._PERTURBATION_SOLARPRESS_ = 0
     if perturbation == "thrust":
       self._PERTURBATION_THRUST_ = 0
-    if perturbation == "moon":
+    if perturbation == "moon_gravity":
       self._PERTURBATION_MOON_ = 0
-    if perturbation == "sun":
+    if perturbation == "sun_gravity":
       self._PERTURBATION_SUN_ = 0
 
   def conwell(self, stateVector,t):
@@ -167,21 +167,31 @@ class Maneuvers:
       Delta = Delta + np.dot(rsw,FJ2)
 
     if self._PERTURBATION_SOLARPRESS_:
+      #u-hat vector pointing from Sun to Earth and Sun position vector
+      uhat, rS = models.solarPosition(self.startDate+timedelta(seconds=t))
+      
       #Solar Radiation Pressure
       PSR = 4.56e-6
       #Absorbing Area
       As = self.spacecraft.area
-      #Shadow function TODO
-      nu = 1
+      #Shadow function
+      rSNorm = np.linalg.norm(rS)
+      rNorm = np.linalg.norm(r)
+      theta = np.arccos(np.dot(rS,r)/(rSNorm*rNorm))
+      theta1 = np.arccos(constants.Re/rNorm)
+      theta2 = np.arccos(constants.Re/rSNorm)
+      if(theta1+theta2 > theta):
+        nu = 1
+      else:
+        nu = 0
       #Radiation Pressure Coefficient (lies between 0 and 1)
       CR = 0.5
       #Spacecraft mass
       mass = self.spacecraft.dryMass+propMass
-      #u-hat vector pointing from Sun to Earth
-      uhat = np.array([1,0,0])
       #Radiation Pressure acceleration
       FR = -nu*PSR*CR*As/mass*uhat
       Delta = Delta + np.dot(rsw,FR)
+      #print(Delta)
 
     if self._PERTURBATION_MOON_:
       r_m = models.lunarPositionAlmanac2013(self.startDate+timedelta(minutes=t))
@@ -190,14 +200,14 @@ class Maneuvers:
       Delta = Delta + np.dot(rsw,pMoon)
 
     if self._PERTURBATION_SUN_:
-      r_s = models.solarPosition(self.startDate+timedelta(minutes=t))
+      uhat, r_s = models.solarPosition(self.startDate+timedelta(seconds=t))
       r_sunSat = r_s-r 
       #F(q) formula from F.3 Appendix Curtis 2013
       # 	c = b - a; a << b
       # 	F = 1 - c**3/b**2
-      qq = 1-r_sunSat**2/r_s**2
+      qq = np.dot(r,(2*r_s-r))/np.linalg.norm(r_s)**2
       Fq = (qq**2 - 3*qq + 3)*qq/(1+(1-qq)**(3/2))
-      pSun = constants.mu_S/r_sunSat**3*(Fq*r_s-r)
+      pSun = constants.mu_S/np.linalg.norm(r_sunSat)**3*(Fq*r_s-r)
       Delta = Delta + np.dot(rsw,pSun)
 
     if self._PERTURBATION_THRUST_:
@@ -241,9 +251,9 @@ class Maneuvers:
     #Integrate
     y0 = np.append(self.history.mee[-1,:],self.history.propMass[-1])
     t = np.linspace(self.history.t[-1],self.history.t[-1]+time,time/60)
-    yp = integrate.odeint(self.betts,y0,t)
-    y = yp[:,0:6] 
-    propMass = yp[:,6]
+    sol = integrate.odeint(self.betts,y0,t)
+    y = sol[:,0:6] 
+    propMass = sol[:,6]
 
     #Initialize r and v for faster stacking
     rLocalHist = np.zeros([y.shape[0],3])
@@ -251,13 +261,44 @@ class Maneuvers:
 
     for idx,row in enumerate(y):
       perc = idx/y.shape[0]*100
-      if perc % 10 < 0.001:
+      if perc % 10 == 0:
         print("Perc:"+str(perc))
       r,v = eq2cart(row)
       rLocalHist[idx,:] = r
       vLocalHist[idx,:] = v
+    datetime = np.array([self.startDate + timedelta(seconds=seconds) for seconds in t])
 
-    datetime = np.array([self.startDate + timedelta(minutes=minutes) for minutes in t])
+    # Update history
+    self.history.t   = np.append(self.history.t,t)
+    self.history.mee = np.vstack((self.history.mee,y))
+    self.history.r   = np.vstack((self.history.r,rLocalHist))
+    self.history.v   = np.vstack((self.history.v,vLocalHist))
+    self.history.maneuverIdxs.append(len(self.history.t))
+    self.history.propMass = np.append(self.history.propMass,propMass)
+    self.history.datetime = np.append(self.history.datetime,datetime)
+
+  def propagate3(self,time):
+    print("Propagating...from day ",self.history.t[-1]/60/60/24," to ",(self.history.t[-1]+time)/60/60/24)
+    #Integrate
+    y0 = np.append(self.history.mee[-1,:],self.history.propMass[-1])
+    t = np.linspace(self.history.t[-1],self.history.t[-1]+time,time/60)
+    sol = integrate.solve_ivp(self.betts,(t[0],t[-1]),y0,method="RK45")
+    t = sol.t
+    y = sol.y[:,0:6] 
+    propMass = sol.y[:,6]
+
+    #Initialize r and v for faster stacking
+    rLocalHist = np.zeros([y.shape[0],3])
+    vLocalHist = np.zeros([y.shape[0],3])
+
+    for idx,row in enumerate(y):
+      perc = idx/y.shape[0]*100
+      if perc % 10 == 0:
+        print("Perc:"+str(perc))
+      r,v = eq2cart(row)
+      rLocalHist[idx,:] = r
+      vLocalHist[idx,:] = v
+    datetime = np.array([self.startDate + timedelta(seconds=seconds) for seconds in t])
 
     # Update history
     self.history.t   = np.append(self.history.t,t)

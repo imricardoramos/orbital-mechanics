@@ -59,17 +59,17 @@ def lunarPositionAlmanac2013(date):
                      rm*np.cos(epsilon)*np.cos(delta)*np.sin(lambd) - np.sin(epsilon)*np.sin(delta),
                      rm*np.sin(epsilon)*np.cos(delta)*np.sin(lambd) + np.cos(epsilon)*np.sin(delta)])
   return rmVect
-def solarPosition(date):
+
+def solarPosition(date,unit="meters"):
   year = date.year
   month = date.month
   day = date.day
   UT = date.hour+date.minute/60
+  # Astronomical unit (km):
+  AU = 149597870.691
   #Julian Day
   J0 = 367*year-int(7*(year+int((month+9)/12))/4)+int(275*month/9)+day+1721013.5
   JD = J0+UT/24
-
-  # Astronomical unit (km):
-  AU = 149597870.691
 
   # Julian days since J2000:
   n = JD - 2451545
@@ -83,9 +83,9 @@ def solarPosition(date):
   # Mean longitude (deg):
   L = 280.460 + 0.98564736*n
   L = L % 360
-  L = L*np.pi/180
   # Apparent ecliptic longitude (deg):
   lamda = L + 1.915*np.sin(M) + 0.020*np.sin(2*M)
+  L = L*np.pi/180
   lamda = lamda % 360
   lamda = lamda*np.pi/180
   # Obliquity of the ecliptic (deg):
@@ -95,14 +95,23 @@ def solarPosition(date):
   u = np.array([np.cos(lamda),
                 np.sin(lamda)*np.cos(eps),
                 np.sin(lamda)*np.sin(eps)])
+  
   # Distance from earth to sun (km):
-  rS = (1.00014 - 0.01671*np.cos(M) - 0.000140*np.cos(2*M))*AU
-  # Distance from earth to sun (m):
-  rS = rS*1e3
-  # Geocentric position vector (km):
+  rS = (1.00014 - 0.01671*np.cos(M) - 0.000140*np.cos(2*M))
+  
+  if unit == "AU":
+    scaler = 1
+  elif unit == "km":
+    scaler = AU
+  else:
+    scaler = AU*1e3
+
+  # Distance from earth to sun:
+  rS = rS*scaler
+  # Geocentric position vector:
   r_S = rS*u;
   
-  return r_S
+  return u, r_S
 
 class Thruster:
   #ISP = 720s
