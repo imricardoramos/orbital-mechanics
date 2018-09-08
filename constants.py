@@ -2,6 +2,8 @@ import numpy as np
 class constants:
   # Universal Gravity
   G = 6.67e-11
+  # Astronomical unit (m):
+  AU = 149597870691
 
   #EARTH
   # Earth Mass

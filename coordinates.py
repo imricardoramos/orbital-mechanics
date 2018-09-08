@@ -87,3 +87,24 @@ def eq2cart(mee):
 
   return r,v
 
+def eq2kep(mee):
+  p = mee[0]
+  f = mee[1]
+  g = mee[2]
+  h = mee[3]
+  k = mee[4]
+  L = mee[5]
+
+  zeta = np.arcsin(g/np.sqrt(g**2+f**2))
+
+  e = np.sqrt(f**2+g**2)
+  a = p/(1-e**2)
+  i = 2*np.arctan(np.sqrt(k**2+h**2))
+  Omega = np.arcsin(k/np.sqrt(k**2+h**2))
+  omega = zeta-Omega
+  M = L - zeta
+  M = M % 2*np.pi
+
+  return np.array([a,e,i,omega,Omega,M])
+
+  

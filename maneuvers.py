@@ -1,5 +1,5 @@
 import numpy as np
-from coordinates import kep2cart, kep2eq, eq2cart
+from coordinates import kep2cart, kep2eq, eq2cart, eq2kep
 import models
 from scipy import integrate
 from constants import constants
@@ -36,7 +36,7 @@ class Maneuvers:
     self.history = ManeuversHistory()
     self.history.r, self.history.v = kep2cart(coe)
     self.history.coe = np.array(coe)
-    self.history.mee = np.array(kep2eq(coe))
+    self.history.mee = kep2eq(coe)
     self.history.mee.shape = (1,6)
     self.history.propMass = [self.spacecraft.wetMass-self.spacecraft.dryMass]
     self.history.datetime = startDate
@@ -81,7 +81,7 @@ class Maneuvers:
       if self._PERTURBATION_ATMDRAG_:
         #Atmospheric Drag
         vrel = v - np.cross(constants.wE,r)
-        Fd = -0.5*models.atmosDensity(z/1000)*np.linalg.norm(vrel)*vrel*(1/self.spacecraft.BC(spacecraft.dryMass+propMass))
+        Fd = -0.5*models.atmosDensity(z/1000)*np.linalg.norm(vrel)*vrel*(1/self.spacecraft.BC(self.spacecraft.dryMass+propMass))
         p = p + Fd
       if self._PERTURBATION_J2_:
         J2 = 0.00108263
@@ -150,7 +150,8 @@ class Maneuvers:
     if self._PERTURBATION_ATMDRAG_:
       #Atmospheric Drag
       vrel = v - np.cross(constants.wE,r)
-      Fd = -0.5*models.atmosDensity(z/1000)*np.linalg.norm(vrel)*vrel*(1/self.spacecraft.BC(spacecraft.dryMass+propMass))
+      Fd = -0.5*models.atmosDensity(z/1000)*np.linalg.norm(vrel)*vrel*(1/self.spacecraft.BC(self.spacecraft.dryMass+propMass))
+      Delta = Delta + np.dot(rsw,Fd)
 
     if self._PERTURBATION_J2_:
       J2 = 0.00108263
@@ -174,6 +175,7 @@ class Maneuvers:
       PSR = 4.56e-6
       #Absorbing Area
       As = self.spacecraft.area
+
       #Shadow function
       rSNorm = np.linalg.norm(rS)
       rNorm = np.linalg.norm(r)
@@ -184,6 +186,7 @@ class Maneuvers:
         nu = 1
       else:
         nu = 0
+
       #Radiation Pressure Coefficient (lies between 0 and 1)
       CR = 0.5
       #Spacecraft mass
@@ -211,15 +214,14 @@ class Maneuvers:
       Delta = Delta + np.dot(rsw,pSun)
 
     if self._PERTURBATION_THRUST_:
+      mass = self.spacecraft.dryMass+propMass
+      #Thrust in out-of-plane direction
+      #Delta = Delta + [0,0,self.spacecraft.thruster.thrust/mass]
       #Thrust in speed direction
       Fth = self.spacecraft.thruster.thrust*v/np.linalg.norm(v)
-      #Thrust in out-of-plane direction
-      #Delta = Delta + [0,0,self.spacecraft.thruster.thrust/self.spacecraft.wetMass]
-
-      mass = self.spacecraft.dryMass+propMass
-      dpropMass = -self.spacecraft.thruster.massFlowRate
-      
       Delta = Delta + np.dot(rsw,Fth/mass)
+
+      dpropMass = -self.spacecraft.thruster.massFlowRate
     else:
       dpropMass = 0
 
@@ -258,6 +260,8 @@ class Maneuvers:
     #Initialize r and v for faster stacking
     rLocalHist = np.zeros([y.shape[0],3])
     vLocalHist = np.zeros([y.shape[0],3])
+    #Initialize coe faster stacking
+    coeLocalHist = np.zeros([y.shape[0],6])
 
     for idx,row in enumerate(y):
       perc = idx/y.shape[0]*100
@@ -266,11 +270,13 @@ class Maneuvers:
       r,v = eq2cart(row)
       rLocalHist[idx,:] = r
       vLocalHist[idx,:] = v
+      coeLocalHist[idx,:] = eq2kep(row)
     datetime = np.array([self.startDate + timedelta(seconds=seconds) for seconds in t])
 
     # Update history
     self.history.t   = np.append(self.history.t,t)
     self.history.mee = np.vstack((self.history.mee,y))
+    self.history.coe = np.vstack((self.history.coe,coeLocalHist))
     self.history.r   = np.vstack((self.history.r,rLocalHist))
     self.history.v   = np.vstack((self.history.v,vLocalHist))
     self.history.maneuverIdxs.append(len(self.history.t))
@@ -294,7 +300,7 @@ class Maneuvers:
     for idx,row in enumerate(y):
       perc = idx/y.shape[0]*100
       if perc % 10 == 0:
-        print("Perc:"+str(perc))
+        print(str(perc)+"%")
       r,v = eq2cart(row)
       rLocalHist[idx,:] = r
       vLocalHist[idx,:] = v

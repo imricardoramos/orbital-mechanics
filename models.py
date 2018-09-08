@@ -1,5 +1,29 @@
 import numpy as np
 from constants import constants
+#def getScaleHeight(h):
+#    kms = [0, 50, 100, 150, 200, 250, 300, 350, 400, 450, 500, 550];
+#    scaleHeights = [8.4, 5.9, 25.5, 37.5, 44.8, 50.3, 54.8, 58.2, 61.3, 64.5, 68.7];
+#    for i,km in enumerate(kms):
+#        if h < km:
+#            #interpolation
+#            k = (kms[i]-h)/(kms[i]-kms[i-1])
+#            scaleHeight = k*(scaleHeights[i]-scaleHeights[i-1])+scaleHeights[i-1]
+#            return scaleHeight;
+#def getAtmDensity(h,solarEpoch='low'):
+#    kms = [0, 20, 40, 60, 80, 100, 120, 140, 160, 180, 200, 220, 240, 260, 280, 300, 320, 340, 360, 380, 400, 420, 440, 460, 480, 500, 520];
+#    if solarEpoch == 'high':
+#        densities = [1.16E+00, 9.41E-02, 4.04E-03, 3.28E-04, 1.68E-05, 2.78E-07, 2.34E-08, 4.93E-09, 2.23E-09, 1.28E-09, 8.28E-10, 5.69E-10, 4.08E-10, 3.00E-10, 2.25E-10, 1.71E-10, 1.32E-10, 1.03E-10, 8.05E-11, 6.35E-11, 5.04E-11, 4.02E-11, 3.23E-11, 2.60E-11, 2.10E-11, 1.70E-11, 1.38E-11];
+#    elif solarEpoch == 'mid':
+#        densities = [1.17E+00, 9.49E-02, 4.07E-03, 3.31E-04, 1.68E-05, 5.08E-07, 1.80E-08, 3.26E-09, 1.18E-09, 5.51E-10, 2.91E-10, 1.66E-10, 9.91E-11, 6.16E-11, 3.94E-11, 2.58E-11, 1.72E-11, 1.16E-11, 7.99E-12, 5.55E-12, 3.89E-12, 2.75E-12, 1.96E-12, 1.40E-12, 1.01E-12, 7.30E-13, 5.31E-13];
+#    elif solarEpoch == 'low':
+#        densities = [1.17E+00, 9.48E-02, 4.07E-03, 3.31E-04, 1.69E-05, 5.77E-07, 1.70E-08, 2.96E-09, 9.65E-10, 3.90E-10, 1.75E-10, 8.47E-11, 4.31E-11, 2.30E-11, 1.27E-11, 7.22E-12, 4.21E-12, 2.50E-12, 1.51E-12, 9.20E-13, 5.68E-13, 3.54E-13, 2.23E-13, 1.42E-13, 9.20E-14, 6.03E-14, 4.03E-14];
+#    for i,km in enumerate(kms):
+#        if h <= km:
+#            #interpolation
+#            k = (kms[i]-h)/(kms[i]-kms[i-1])
+#            density = k*(densities[i]-densities[i-1])+densities[i-1]
+#            return density;
+
 def atmosDensity(z):
     i=0
     h = [ 0, 25, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130, 140, 150, 180, 200, 250, 300, 350, 400, 450, 500, 600, 700, 800, 900, 1000];
@@ -12,6 +36,7 @@ def atmosDensity(z):
         i = 27
     density = rho[i]*np.exp(-(z-h[i])/H[i]);
     return density
+
 def lunarPositionAlmanac2013(date):
   #Coefficients for Computing Lunar Position (Table 12.1 Curtis)
   a = [0, 6.29, -1.27, 0.66, 0.21, -0.19, -0.11]
@@ -114,19 +139,47 @@ def solarPosition(date,unit="meters"):
   return u, r_S
 
 class Thruster:
-  #ISP = 720s
+  # Pa: Power Available 1W
+  Pa = 1
+  # ISP = 720s
   isp = 720
-  #Trust = 1N
-  thrust = 5e-2
-
-  #Calculated mass flow rate (kg/s)
+  # Efficiency
+  eta = 1
+  # Duty Cycle
+  D = 1
+  thrust = 1e-1
   massFlowRate = thrust/(isp*constants.g0)
+
+  @classmethod
+  def powerToThrust(cls):
+    #Power to thrust model
+    cls.thrust = 2*cls.D*cls.eta*cls.Pa/(constants.g0*cls.isp)
+    #Trust = 1N
+    #self.thrust = 5e-2
+
+    #Calculated mass flow rate (kg/s)
+    cls.massFlowRate = cls.thrust/(cls.isp*constants.g0)
+
+class solarPanels:
+  area = 30e-2*10e-2
+  efficiency = 1
+  #Power Density at Earth Surface (1.4 kW/m^2)
+  nominalPowerDensity = 1.4e3
+  nominalPower = area*efficiency*nominalPowerDensity
+  
+  #TODO
+  @classmethod
+  def power(cls):
+    r_sunSat = constants.AU
+    outputPower = cls.nominalPower*constants.AU**2/r_sunSat**2
+    return outputPower
 
 class Spacecraft:
   def __init__(self,wetMass,dryMass,area):
     self.wetMass = wetMass
     self.dryMass = dryMass
     self.area = area
+    self.solarPanels = solarPanels()
     self.thruster = Thruster()
 
   def BC(self,wetMass):
@@ -149,3 +202,4 @@ class Cubesat(Spacecraft):
     dimensions = [10e-2,10e-2,30e-2]
     A = dimensions[0]*dimensions[1]
     Spacecraft.__init__(self,totalMass,totalMass-propellantMass,A)
+
