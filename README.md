@@ -8,7 +8,7 @@ Se han implementado 5 archivos:
 - <strong>helpers.py:</strong> en éste código se definen funciones auxiliares o misceláneas que tienen como propósito facilitar la interacción del usuario. En este momento sólo se tiene un extractor de elementos a partir de un TLE un una funcíón para facilitar la mantención del aspect ratio al graficar en 3D.
 
 ### Modo de uso:
-En primer lugar se deben definir el modelo de <i>Spacecraft</i>, los elementos orbitales asociados a él y la fecha a la cual pertenecen dichos elementos orbitales.
+En primer lugar se debe declarar el modelo de <i>spacecraft</i>, los elementos orbitales asociados a él y la fecha a la cual pertenecen dichos elementos orbitales.
 Si bien en el ejemplo de abajo se obtienen a partir de un TLE, se pueden definir manualmente.
 `coe` corresponde a los elementos orbitales expresados de manera kepleriana y en una lista de orden `[a,e,i,omega,Omega,M]`. La fecha simplemente es un `datetime`.
 Éstos parametos son pasados al constructor del objeto Maneuvers, para definir el estado inicial de la maniobra.
@@ -54,7 +54,7 @@ maneuvers.history.datetime
 maneuvers.history.dv
 ```
 Ejemplos de uso y resultados:
-<a href="https://github.com/MrPapasFritas/frames-days/blob/master/Demo - Ascent.ipynb">Demo - Ascent</a>
-<a href="https://github.com/MrPapasFritas/frames-days/blob/master/Demo - Deorbiting.ipynb">Demo - Deorbiting</a>
-<a href="https://github.com/MrPapasFritas/frames-days/blob/master/Demo - Inclination Change.ipynb">Demo - Inclination Change</a>
-<a href="https://github.com/MrPapasFritas/frames-days/blob/master/Demo - Perturbations.ipynb">Demo - Perturbations</a>
+- <a href="https://github.com/MrPapasFritas/frames-days/blob/master/Demo - Ascent.ipynb">Demo - Ascent</a>
+- <a href="https://github.com/MrPapasFritas/frames-days/blob/master/Demo - Deorbiting.ipynb">Demo - Deorbiting</a>
+- <a href="https://github.com/MrPapasFritas/frames-days/blob/master/Demo - Inclination Change.ipynb">Demo - Inclination Change</a>
+- <a href="https://github.com/MrPapasFritas/frames-days/blob/master/Demo - Perturbations.ipynb">Demo - Perturbations</a>
