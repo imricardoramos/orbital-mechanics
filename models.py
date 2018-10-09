@@ -139,26 +139,42 @@ def solarPosition(date,unit="meters"):
   return u, r_S
 
 class Thruster:
-  # Pa: Power Available 1W
-  Pa = 1
-  # ISP = 720s
-  isp = 720
-  # Efficiency
-  eta = 1
-  # Duty Cycle
-  D = 1
-  thrust = 1e-1
-  massFlowRate = thrust/(isp*constants.g0)
+  def __init__(self,**kwargs):
+    # DEFAULT VALUES
+    # Power Available [W]
+    self.Pa = 1
+    # ISP [s]
+    self.isp = 720
+    # Efficiency 
+    self.eta = 1
+    # Duty Cycle
+    self.D = 1
+    # Thrust [N]
+    self.thrust = 1e-1
 
-  @classmethod
-  def powerToThrust(cls):
-    #Power to thrust model
-    cls.thrust = 2*cls.D*cls.eta*cls.Pa/(constants.g0*cls.isp)
-    #Trust = 1N
-    #self.thrust = 5e-2
+    for key in kwargs:
+      if(key == 'thrust'):
+        self.thrust = kwargs[key]
+      if(key == 'isp'):
+        self.isp = kwargs[key]
+      if(key == 'power_available'):
+        self.Pa = kwargs[key]
+      if(key == 'duty_cycle'):
+        self.D = kwargs[key]
+      if(key == 'efficiency'):
+        eta = kwargs[key]
 
-    #Calculated mass flow rate (kg/s)
-    cls.massFlowRate = cls.thrust/(cls.isp*constants.g0)
+    self.massFlowRate = abs(self.thrust)/(self.isp*constants.g0)
+
+  #@classmethod
+  #def powerToThrust(cls):
+  #  #Power to thrust model
+  #  cls.thrust = 2*cls.D*cls.eta*cls.Pa/(constants.g0*cls.isp)
+  #  #Trust = 1N
+  #  #self.thrust = 5e-2
+
+  #  #Calculated mass flow rate (kg/s)
+  #  cls.massFlowRate = cls.thrust/(cls.isp*constants.g0)
 
 class solarPanels:
   area = 30e-2*10e-2
@@ -180,7 +196,6 @@ class Spacecraft:
     self.dryMass = dryMass
     self.area = area
     self.solarPanels = solarPanels()
-    self.thruster = Thruster()
 
   def BC(self,wetMass):
     Cd = 2.2
@@ -195,11 +210,27 @@ class CurtisSat(Spacecraft):
     Spacecraft.__init__(self,m,m,A)
 
 class Cubesat(Spacecraft):
-  def __init__(self):
-    #Spacecraft Data
-    totalMass = 3
-    propellantMass = 1
-    dimensions = [10e-2,10e-2,30e-2]
-    A = dimensions[0]*dimensions[1]
+  def __init__(self,nUnits):
+    if nUnits == "1U":
+      totalMass = 1
+      propellantMass = totalMass/3
+      dimensions = [10e-2,10e-2,30e-2]
+    if nUnits == "3U":
+      totalMass = 3
+      propellantMass = totalMass/3
+      dimensions = [10e-2,10e-2,30e-2]
+    if nUnits == "6U":
+      totalMass = 6
+      propellantMass = totalMass/3
+      dimensions = [10e-2,10e-2,30e-2]
+    if nUnits == "12U":
+      totalMass = 12
+      propellantMass = totalMass/3
+      dimensions = [10e-2,10e-2,30e-2]
+
+    A = 2*(dimensions[0]*dimensions[1]+\
+           dimensions[1]*dimensions[2]+\
+           dimensions[0]*dimensions[2])/6
+
     Spacecraft.__init__(self,totalMass,totalMass-propellantMass,A)
 

@@ -5,6 +5,14 @@ from scipy import integrate
 from constants import constants
 from datetime import timedelta
 
+from mpl_toolkits.mplot3d import Axes3D
+import matplotlib.pyplot as  plt
+import matplotlib.dates as mdates
+import matplotlib.ticker as mticker
+import mplcursors
+
+import auxiliary
+
 class ManeuversHistory:
   def __init__(self):
     self.t = [0]
@@ -19,7 +27,7 @@ class ManeuversHistory:
 
 class Maneuvers:
 
-  def __init__(self,coe,spacecraft,startDate):
+  def __init__(self,coe,spacecraft,startDate,**kwargs):
 
     #Perturbation Flags
     self._PERTURBATION_ATMDRAG_ = 0
@@ -40,6 +48,12 @@ class Maneuvers:
     self.history.mee.shape = (1,6)
     self.history.propMass = [self.spacecraft.wetMass-self.spacecraft.dryMass]
     self.history.datetime = startDate
+
+    # Other options
+    self.verbose = False;
+    for key in kwargs:
+      if key == 'verbose':
+        self.verbose = kwargs[key]
 
   def addPerturbation(self,perturbation):
     if perturbation == "atmosphere":
@@ -133,9 +147,10 @@ class Maneuvers:
     s = np.sqrt(1+h**2+k**2)
     r,v = eq2cart(equinoctial_coordinates)
     z = np.linalg.norm(r) - constants.Re
-    if t % (60*60*24) < 100:
-      #print("equinocitalElements:"+str(equinoctial_coordinates))
-      print("Day:"+str(t/60/60/24)+"\tHeight: "+str(z/1000)+" km"+"\tMass: "+str(propMass))
+    if self.verbose:
+      if t % (60*60*24) < 100:
+        #print("equinocitalElements:"+str(equinoctial_coordinates))
+        print("Day:"+str(t/60/60/24)+"\tHeight: "+str(z/1000)+" km"+"\tMass: "+str(propMass))
 
     #RSW frame definition from r and v
     rhat = r/np.linalg.norm(r)
@@ -213,7 +228,7 @@ class Maneuvers:
       pSun = constants.mu_S/np.linalg.norm(r_sunSat)**3*(Fq*r_s-r)
       Delta = Delta + np.dot(rsw,pSun)
 
-    if self._PERTURBATION_THRUST_:
+    if self._PERTURBATION_THRUST_ and propMass > 0:
       mass = self.spacecraft.dryMass+propMass
       #Thrust in out-of-plane direction
       #Delta = Delta + [0,0,self.spacecraft.thruster.thrust/mass]
@@ -265,8 +280,9 @@ class Maneuvers:
 
     for idx,row in enumerate(y):
       perc = idx/y.shape[0]*100
-      if perc % 10 == 0:
-        print("Perc:"+str(perc))
+      if self.verbose:
+        if perc % 10 == 0:
+          print(str(perc)+"%")
       r,v = eq2cart(row)
       rLocalHist[idx,:] = r
       vLocalHist[idx,:] = v
@@ -317,3 +333,66 @@ class Maneuvers:
   def impulsive_maneuver(self,dv):
     self.current_v = self.current_v+dv
 
+  def plot(self, item, itemHistory=None):
+    if item == "com":
+      # PLOTTING CLASSICAL ORBITAL ELEMENTS
+      titles = ["a","e","i","$\omega$","$\Omega$","M"]
+      ylabels = ["[m]", "", "[°]", "[°]", "[°]", "[°]"]
+      fig, axes = plt.subplots(3,2,figsize=(10,8))
+      for i in range(0,6):
+        for j in range(0,len(self.history.maneuverIdxs)-1):
+          maneuverSlice = slice(self.history.maneuverIdxs[j],self.history.maneuverIdxs[j+1])
+          if i in [2,3,4,5]:
+            axes[int((i-i%2)/2),i%2].plot(self.history.datetime[maneuverSlice],self.history.coe[maneuverSlice,i]*180/np.pi)
+          else:
+            axes[int((i-i%2)/2),i%2].plot(self.history.datetime[maneuverSlice],self.history.coe[maneuverSlice,i])
+          axes[int((i-i%2)/2),i%2].set_title(titles[i]+" "+ylabels[i])
+          
+          fig.autofmt_xdate()
+          axes[int((i-i%2)/2),i%2].xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
+          axes[int((i-i%2)/2),i%2].yaxis.get_major_formatter().set_scientific(False)
+          axes[int((i-i%2)/2),i%2].yaxis.get_major_formatter().set_useOffset(False)
+          axes[int((i-i%2)/2),i%2].grid(b=True)
+
+    if item == "3d-trajectory":
+      #Plot 3D Trajectory
+      fig = plt.figure()
+      ax = fig.add_subplot(111, projection='3d')
+      markers = np.zeros([len(self.history.maneuverIdxs)-1,3])
+      
+      for i in range(0,len(self.history.maneuverIdxs)-1):
+          maneuverSlice = slice(self.history.maneuverIdxs[i],self.history.maneuverIdxs[i+1])
+          ax.plot3D(self.history.r[maneuverSlice,0]/1000,
+                    self.history.r[maneuverSlice,1]/1000,
+                    self.history.r[maneuverSlice,2]/1000,linewidth=1)
+          markers[i,:]= self.history.r[self.history.maneuverIdxs[i],:]/1000
+      ax.plot3D(markers[:,0],markers[:,1],markers[:,2],"k.")
+      auxiliary.set_axes_equal(ax)
+      ax.set_aspect("equal")
+      scale_x = 1.2
+      scale_y = 1.2
+      scale_z = 1.2
+      ax.get_proj = lambda: np.dot(Axes3D.get_proj(ax), np.diag([scale_x, scale_y, scale_z, 1]))
+      ax.set_title("Satellite Trajectory [km]")
+      ax.set_xlabel("X [km]");
+      ax.set_ylabel("Y [km]");
+      ax.set_zlabel("Z [km]");
+
+
+    if item == "singleItem":
+      if np.isscalar(itemHistory) and itemHistory == None:
+        raise Exception("History Data not specified.")
+      else:
+        fig, ax = plt.subplots(figsize=(10,4))
+        for i in range(0,len(self.history.maneuverIdxs)-1):
+            maneuverSlice = slice(self.history.maneuverIdxs[i],self.history.maneuverIdxs[i+1])
+            ax.plot(self.history.datetime[maneuverSlice], itemHistory[maneuverSlice],linewidth=1)
+
+        ax.set_title("Satellite Height [km]")
+        fig.autofmt_xdate()
+        ax.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
+        ax.yaxis.set_major_formatter(mticker.ScalarFormatter())
+        ax.yaxis.get_major_formatter().set_scientific(False)
+        ax.yaxis.get_major_formatter().set_useOffset(False)
+        plt.grid()
+        mplcursors.cursor(hover=True)
