@@ -2,49 +2,59 @@ import numpy as np
 from constants import constants
 
 def kep2cart(coe):
-    """ Keplerian to Cartesian """
-    a = coe[0]
-    e = coe[1]
-    i = coe[2]
-    omega = coe[3]
-    Omega = coe[4]
-    M0 = coe[5]
-    mu = constants.mu_E
+  """ Keplerian to Cartesian """
+  a = coe[0]
+  e = coe[1]
+  i = coe[2]
+  omega = coe[3]
+  Omega = coe[4]
+  nu = coe[5]
 
-    t = 0
-    t0 = 0
-    deltat = 86400*(t-t0)
-    M = M0+deltat*(mu/a**3)**0.5
-    
-    for E in range(0,3600):
-        E = E/10*np.pi/180
-        if(abs(E-e*np.sin(E)-M) < 0.01):
-            break;
-    
-    nu = 2*np.arctan2((1+e)**0.5*np.sin(E/2),(1-e)**0.5*np.cos(E/2))
-    rc = a*(1-e*np.cos(E))
-    o = rc*np.array([np.cos(nu),np.sin(nu)])
-    odot = (mu*a)**0.5/rc*np.array([-np.sin(E), (1-e**2)**0.5*np.cos(E)])
-    rotationMatrix =  np.array(
-            [[np.cos(omega)*np.cos(Omega)-np.sin(omega)*np.cos(i)*np.sin(Omega), -(np.sin(omega)*np.cos(Omega)+np.cos(omega)*np.cos(i)*np.sin(Omega))],
-             [np.cos(omega)*np.sin(Omega)+np.sin(omega)*np.cos(i)*np.cos(Omega),   np.cos(omega)*np.cos(i)*np.cos(Omega)-np.sin(omega)*np.sin(Omega)],
-             [np.sin(omega)*np.sin(i), np.cos(omega)*np.sin(i)]])
-    r = np.matmul(rotationMatrix,o)
-    v = np.matmul(rotationMatrix,odot)
+  E = 2*np.arctan2(np.tan(nu/2),np.sqrt((1+e)/(1-e)))
 
-    return r,v
+  mu = constants.mu_E
+  rc = a*(1-e*np.cos(E))
+  o = rc*np.array([np.cos(nu),np.sin(nu)])
+  odot = (mu*a)**0.5/rc*np.array([-np.sin(E), (1-e**2)**0.5*np.cos(E)])
+  rotationMatrix =  np.array(
+          [[np.cos(omega)*np.cos(Omega)-np.sin(omega)*np.cos(i)*np.sin(Omega), -(np.sin(omega)*np.cos(Omega)+np.cos(omega)*np.cos(i)*np.sin(Omega))],
+           [np.cos(omega)*np.sin(Omega)+np.sin(omega)*np.cos(i)*np.cos(Omega),   np.cos(omega)*np.cos(i)*np.cos(Omega)-np.sin(omega)*np.sin(Omega)],
+           [np.sin(omega)*np.sin(i), np.cos(omega)*np.sin(i)]])
+  r = np.matmul(rotationMatrix,o)
+  v = np.matmul(rotationMatrix,odot)
+
+  return r,v
 
 def cart2kep(r,v):
-    """ Cartesian to Keplerian """
-    mu = constants.mu_E
-    h = np.cross(r,v)
-    rNorm = np.linalg.norm(r)
-    vNorm = np.linalg.norm(v)
-    eVect = np.cross(v,h)/mu-r/rNorm
-    e = np.linalg.norm(eVect)
-    a = 1/(2/rNorm-vNorm**2/mu)
+  """ Cartesian to Keplerian """
+  mu = constants.mu_E
+  h = np.cross(r,v)
+  rNorm = np.linalg.norm(r)
+  vNorm = np.linalg.norm(v)
+  eVect = np.cross(v,h)/mu-r/rNorm
+  e = np.linalg.norm(eVect)
+  n = np.array([-h[1],h[0],0]);
+  nu = np.arccos(np.dot(eVect,r)/(e*rNorm))
+  if np.dot(r,v) < 0:
+    nu = 2*np.pi-nu
+  i = np.arccos(h[2]/np.linalg.norm(h))
+  E = 2*np.arctan2(np.tan(nu/2),np.sqrt((1+e)/(1-e)))
+  Omega = np.arccos(n[0]/np.linalg.norm(n))
+  if n[1] < 0:
+    Omega = 2*np.pi-Omega
+  omega = np.arccos(np.dot(n,eVect)/(np.linalg.norm(n)*e))
+  if eVect[2] < 0:
+    omega = 2*np.pi-omega
+  #M = E-e*np.sin(E)
+  a = 1/(2/rNorm-vNorm**2/mu)
 
-    return a,e
+  # Ranges:
+  # i = [0,180°]
+  # omega (ARGP) = [0,360°]
+  # Omega (RAAN) = [0,360°]
+  # M = [0,360°]
+
+  return np.array([a,e,i,omega,Omega,nu])
 
 def kep2eq(coe):
   """ Keplerian to Equinoctial """
@@ -95,16 +105,17 @@ def eq2kep(mee):
   k = mee[4]
   L = mee[5]
 
-  zeta = np.arcsin(g/np.sqrt(g**2+f**2))
-
+  a = p/(1-f**2-g**2)
   e = np.sqrt(f**2+g**2)
-  a = p/(1-e**2)
-  i = 2*np.arctan(np.sqrt(k**2+h**2))
-  Omega = np.arcsin(k/np.sqrt(k**2+h**2))
-  omega = zeta-Omega
-  M = L - zeta
-  M = M % 2*np.pi
+  i = np.arctan2(2*np.sqrt(k**2+h**2),1-h**2-k**2)
+  omega = np.arctan2(g*h-f*k,f*h+g*k)
+  Omega = np.arctan2(k,h)
+  nu = L-Omega-omega
 
-  return np.array([a,e,i,omega,Omega,M])
+  omega = (omega + 2*np.pi)/np.pi % 2*np.pi
+  Omega = (Omega + 2*np.pi)/np.pi % 2*np.pi
+  nu = nu/np.pi % 2*np.pi
+
+  return np.array([a,e,i,omega,Omega,nu])
 
   
