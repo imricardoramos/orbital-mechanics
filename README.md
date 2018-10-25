@@ -24,15 +24,15 @@ El método `propagate` propaga en el tiempo y acepta el tiempo en segundos, y un 
 maneuvers.addPerturbation("solar_pressure")
 maneuvers.addPerturbation("atmosphere")
 # Propagate 1 day 
-maneuvers.propagate(60*60*24*1)
+maneuvers.propagate(60*60*24*1, 60)
 # Start thrust
 maneuvers.addPerturbation("thrust")
 # Propagate for 18 days
-maneuvers.propagate2(60*60*24*18)
+maneuvers.propagate2(60*60*24*18, 60)
 # Stop thrust
 maneuvers.removePerturbation("thrust")
 # Propagate for 1 day
-maneuvers.propagate2(60*60*24*1)
+maneuvers.propagate(60*60*24*1, 60)
 ```
 En cada propagación se van guardando los datos en el historial de la maniobra:
 ```python
@@ -62,5 +62,5 @@ Ejemplos de uso y resultados:
 - <a href="https://github.com/MrPapasFritas/frames-days/blob/master/Demo - Energy.ipynb">Demo - Energy</a>
 - <a href="https://github.com/MrPapasFritas/frames-days/blob/master/Demo - Relative Motion.ipynb">Demo - Relative Motion</a>
 - <a href="https://github.com/MrPapasFritas/frames-days/blob/master/Demo - Single Orbital Parameter Modification.ipynb">Demo - Single Orbital Parameter Modification</a>
-- <a href="https://github.com/MrPapasFritas/frames-days/blob/master/Validation - Perturbations">Validation - Perturbations</a>
-- <a href="https://github.com/MrPapasFritas/frames-days/blob/master/Validation - STK">Validation - STK</a>
+- <a href="https://github.com/MrPapasFritas/frames-days/blob/master/Validation - Perturbations.ipynb">Validation - Perturbations</a>
+- <a href="https://github.com/MrPapasFritas/frames-days/blob/master/Validation - STK.ipynb">Validation - STK</a>
