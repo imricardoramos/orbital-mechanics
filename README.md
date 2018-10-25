@@ -14,21 +14,21 @@ Si bien en el ejemplo de abajo se obtienen a partir de un TLE, se pueden definir
 Éstos parametos son pasados al constructor del objeto Maneuvers, para definir el estado inicial de la maniobra.
 ```python
 coe,date = helpers.parseTle("suchai0.tle")
-satellite = Cubesat()
+satellite = Cubesat("3U")
 maneuvers = Maneuvers(coe,satellite,date)
 ```
 Luego podemos agregar las perturbaciones al objeto maneuvers para agregar las perturbaciones (hasta ahora se ha implementado `atmosphere`, `solar_pressure`, `moon_gravity`, `sun_gravity`, `J2` y `thrust`)
-El método `propagate2` propaga en el tiempo y acepta el tiempo en segundos, con un mínimo de 60 segundos.
+El método `propagate` propaga en el tiempo y acepta el tiempo en segundos, y un timestep en segundos.
 ```python
 # Add solar pressure and atmospheric drag perturbations to maneuver
 maneuvers.addPerturbation("solar_pressure")
 maneuvers.addPerturbation("atmosphere")
 # Propagate 1 day 
-maneuvers.propagate2(60*60*24*1)
+maneuvers.propagate(60*60*24*1)
 # Start thrust
 maneuvers.addPerturbation("thrust")
 # Propagate for 18 days
-maneuvers.propagate2(60*60*18)
+maneuvers.propagate2(60*60*24*18)
 # Stop thrust
 maneuvers.removePerturbation("thrust")
 # Propagate for 1 day
@@ -58,3 +58,9 @@ Ejemplos de uso y resultados:
 - <a href="https://github.com/MrPapasFritas/frames-days/blob/master/Demo - Deorbiting.ipynb">Demo - Deorbiting</a>
 - <a href="https://github.com/MrPapasFritas/frames-days/blob/master/Demo - Inclination Change.ipynb">Demo - Inclination Change</a>
 - <a href="https://github.com/MrPapasFritas/frames-days/blob/master/Demo - Perturbations.ipynb">Demo - Perturbations</a>
+- <a href="https://github.com/MrPapasFritas/frames-days/blob/master/Demo - Energy.ipynb">Demo - Energy</a>
+- <a href="https://github.com/MrPapasFritas/frames-days/blob/master/Demo - Energy.ipynb">Demo - Energy</a>
+- <a href="https://github.com/MrPapasFritas/frames-days/blob/master/Demo - Relative Motion.ipynb">Demo - Relative Motion</a>
+- <a href="https://github.com/MrPapasFritas/frames-days/blob/master/Demo - Single Orbital Parameter Modification.ipynb">Demo - Single Orbital Parameter Modification</a>
+- <a href="https://github.com/MrPapasFritas/frames-days/blob/master/Validation - Perturbations">Validation - Perturbations</a>
+- <a href="https://github.com/MrPapasFritas/frames-days/blob/master/Validation - STK">Validation - STK</a>
