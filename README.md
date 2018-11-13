@@ -1,4 +1,4 @@
-# Modelamiento de dinámica orbital de cubesat 3U para determinación de costos propuslivos, energéticos y temporales en maniobras orbitales de bajo empuje predeterminados
+# Modelamiento de dinámica orbital de cubesat 3U para determinación de costos propulsivos, energéticos y temporales en maniobras orbitales de bajo empuje predeterminados
 ### Explicación del código implementado a la fecha:
 Se han implementado 5 archivos:
 - <strong>constants.py:</strong> en éste código se definen todas las constantes a ser usadas en el resto del código como las constantes gravitacionales estándares de la Tierra, el Sol y la Luna, el radio de la Tierra, la constante de gravedad y las masas de la Tierra, la Luna y el Sol, entre otras.
@@ -109,7 +109,7 @@ Algunos ejemplos de uso:
 - <a href="https://github.com/MrPapasFritas/frames-days/blob/master/Demo - Perturbations.ipynb">Demo - Perturbations</a>
 - <a href="https://github.com/MrPapasFritas/frames-days/blob/master/Demo - Eclipse.ipynb">Demo - Eclipse</a>
 - <a href="https://github.com/MrPapasFritas/frames-days/blob/master/Demo - Energy.ipynb">Demo - Energy</a>
-- <strong><a href="https://github.com/MrPapasFritas/frames-days/blob/master/Demo - Relative Motion.ipynb">Demo - Relative Motion</a></strong>
+- <a href="https://github.com/MrPapasFritas/frames-days/blob/master/Demo - Relative Motion.ipynb">Demo - Relative Motion</a>
 - <strong><a href="https://github.com/MrPapasFritas/frames-days/blob/master/Demo - Single Orbital Parameter Modification.ipynb">Demo - Single Orbital Parameter Modification</a></strong>
 - <a href="https://github.com/MrPapasFritas/frames-days/blob/master/Demo - Target Run.ipynb">Demo - Target Run</a>
 - <a href="https://github.com/MrPapasFritas/frames-days/blob/master/Validation - Perturbations.ipynb">Validation - Perturbations</a>
@@ -119,4 +119,4 @@ Algunos ejemplos de uso:
 Estudios más concretos:
 - <a href="https://github.com/MrPapasFritas/frames-days/blob/master/Study - Station Keeping.ipynb">Study - Station Keeping</a>
 - <a href="https://github.com/MrPapasFritas/frames-days/blob/master/Study - Deorbiting">Study - Deorbiting</a>
-- <a href="https://github.com/MrPapasFritas/frames-days/blob/master/Study - Relative Motion">Study - Relative Motion</a>
+- <a href="https://github.com/MrPapasFritas/frames-days/blob/master/Study - Orbiting Bodies">Study - Orbiting Bodies</a>
