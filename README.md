@@ -102,6 +102,7 @@ maneuvers.calculateEclipseHours()
 maneuvers.calculatePower()
 ```
 Algunos ejemplos de uso:  
+
 <strong>Nota: varios de los ejemplos utilizan la librería `ipyvolume` para graficar en 3D. Es muy recomendado intentar instalar esta librería.</strong>
 - <a href="https://github.com/MrPapasFritas/frames-days/blob/master/Demo - Deorbiting.ipynb">Demo - Deorbiting</a>
 - <a href="https://github.com/MrPapasFritas/frames-days/blob/master/Demo - Inclination Change.ipynb">Demo - Inclination Change</a>
