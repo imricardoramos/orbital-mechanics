@@ -1,5 +1,5 @@
 import numpy as np
-from constants import constants
+import constants
 
 def kep2cart(coe):
   """ Keplerian to Cartesian """
@@ -118,4 +118,19 @@ def eq2kep(mee):
 
   return np.array([a,e,i,omega,Omega,nu])
 
-  
+def rsw2eci(r,v,vector):
+  #RSW frame definition from r and v
+  rhat = r/np.linalg.norm(r)
+  w = np.cross(rhat,v)
+  what = w/np.linalg.norm(w)
+  shat = np.cross(what,rhat)
+  rsw = [rhat, shat, what]
+  return np.dot(np.transpose(rsw),vector)
+def eci2rsw(r,v,vector):
+  #RSW frame definition from r and v
+  rhat = r/np.linalg.norm(r)
+  w = np.cross(rhat,v)
+  what = w/np.linalg.norm(w)
+  shat = np.cross(what,rhat)
+  rsw = [rhat, shat, what]
+  return np.dot(rsw,vector)

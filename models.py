@@ -1,5 +1,5 @@
 import numpy as np
-from constants import constants
+import constants
 #def getScaleHeight(h):
 #    kms = [0, 50, 100, 150, 200, 250, 300, 350, 400, 450, 500, 550];
 #    scaleHeights = [8.4, 5.9, 25.5, 37.5, 44.8, 50.3, 54.8, 58.2, 61.3, 64.5, 68.7];
@@ -165,33 +165,43 @@ class Thruster:
       if(key == 'duty_cycle'):
         self.D = kwargs[key]
       if(key == 'efficiency'):
-        eta = kwargs[key]
+        self.eta = kwargs[key]
 
     self.massFlowRate = abs(self.thrust)/(self.isp*constants.g0)
 
-  #@classmethod
-  #def powerToThrust(cls):
-  #  #Power to thrust model
-  #  cls.thrust = 2*cls.D*cls.eta*cls.Pa/(constants.g0*cls.isp)
-  #  #Trust = 1N
-  #  #self.thrust = 5e-2
+  def powerToThrust(self):
+    #Power to thrust model
+    self.thrust = 2*self.D*self.eta*self.Pa/(constants.g0*self.isp)
+  def thrustToPower(self):
+    return self.thrust*(constants.g0*self.isp)/(2*self.D*self.eta)
 
-  #  #Calculated mass flow rate (kg/s)
-  #  cls.massFlowRate = cls.thrust/(cls.isp*constants.g0)
+class IFMNanoThruster(Thruster):
+  # Ref: https://www.cubesatshop.com/wp-content/uploads/2017/04/ENP-IFM-Nano-Thruster-Product-Overview.pdf 
+  def __init__(self):
+    Thruster.__init__(self, thrust=350e-6,isp=3000,duty_cycle=0.5,efficiency=0.3)
 
 class solarPanels:
-  area = 30e-2*10e-2
-  efficiency = 1
-  #Power Density at Earth Surface (1.4 kW/m^2)
-  nominalPowerDensity = 1.4e3
-  nominalPower = area*efficiency*nominalPowerDensity
+  def __init__(self):
+    self.area = 30e-2*10e-2
+    self.efficiency = 1
+    #Power Density at Earth Surface (1.4 kW/m^2)
+    self.nominalPowerDensity = 1400
+    self.nominalPower = self.area*self.efficiency*self.nominalPowerDensity
   
-  #TODO
-  @classmethod
-  def power(cls):
-    r_sunSat = constants.AU
-    outputPower = cls.nominalPower*constants.AU**2/r_sunSat**2
+  def power(self,r,datetime):
+    uhat, r_s = solarPosition(datetime)
+    r_sunSat = r-r_s
+    outputPower = self.nominalPower*constants.AU**2/np.linalg.norm(r_sunSat)**2
     return outputPower
+
+class DHV_CS_10(solarPanels):
+  # Ref: https://www.cubesatshop.com/product/cubesat-solar-panels/
+  def __init__(self,n):
+    # Nominal Conditions: AM0 WRC = 1367 W/m2; T = 28 °C
+    self.area = 82.5e-3 * 98e-3 * 0.8
+    self.efficiency = 0.3
+    self.nominalPowerDensity = 1367
+    self.nominalPower = 4.82*0.5*n
 
 class Spacecraft:
   def __init__(self,wetMass,dryMass,area):
@@ -199,10 +209,10 @@ class Spacecraft:
     self.dryMass = dryMass
     self.area = area
     self.solarPanels = solarPanels()
+    self.Cd = 2.2
 
   def BC(self,wetMass):
-    Cd = 2.2
-    return wetMass/(Cd*self.area)
+    return wetMass/(self.Cd*self.area)
 
 class CurtisSat(Spacecraft):
   def __init__(self):

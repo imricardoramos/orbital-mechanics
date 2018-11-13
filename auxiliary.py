@@ -1,4 +1,4 @@
-from constants import constants
+import constants
 import numpy as np
 import datetime
 def parseTle(tlefile):
