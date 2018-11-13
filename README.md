@@ -119,4 +119,4 @@ Algunos ejemplos de uso:
 Estudios más concretos:
 - <a href="https://github.com/MrPapasFritas/frames-days/blob/master/Study - Station Keeping.ipynb">Study - Station Keeping</a>
 - <a href="https://github.com/MrPapasFritas/frames-days/blob/master/Study - Deorbiting.ipynb">Study - Deorbiting</a>
-- <a href="https://github.com/MrPapasFritas/frames-days/blob/master/Study - Orbiting Bodies.ipynb">Study - Orbiting Bodies</a>
+- <a href="https://github.com/MrPapasFritas/frames-days/blob/master/Study - Orbiting bodies.ipynb">Study - Orbiting Bodies</a>
