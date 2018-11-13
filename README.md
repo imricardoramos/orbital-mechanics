@@ -49,7 +49,7 @@ maneuvers.propagate(60*60*24*1, 60)
 ```
 Para orientar el empuje es posible definir funciones de callback que acepten coe como entrada, y entreguen ángulos alpha y beta de orientación definidos en el sistema de referencia rsw del satélite:
 <img src="misc/rswFrame.png"/>
-```
+```python
 def alphaCallback(coe):
     # Alpha is such that is always pointing in the direction of velocity
     e = coe[1]
@@ -68,7 +68,7 @@ maneuver.propagate(60*60*24*10,60)
 Varios ejemplos de lo anterior pueden verse en <a href="https://github.com/MrPapasFritas/frames-days/blob/master/Demo - Single Orbital Parameter Modification.ipynb">éste demo</a>  
 
 También se ha implementado un método para imponer una órbita objetivo y que el empuje sea calculado de manera de llegar a aquella órbita:
-```
+```python
 # Add thrust
 maneuvers.addPerturbation("thrust")
 # Set Target Orbit
@@ -97,7 +97,7 @@ maneuvers.history.t
 maneuvers.history.datetime
 ```
 Además existen variables que pueden ser calculadas a posteriori, como por ejemplo:
-```
+```python
 maneuvers.calculateEclipseHours()
 maneuvers.calculatePower()
 ```
