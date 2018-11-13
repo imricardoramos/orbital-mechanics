@@ -77,7 +77,7 @@ maneuvers.setTargetOrbit(targetOrbitElements)
 # Propagate for 18 days
 maneuvers.propagate(60*60*24*18, 60)
 ```
-Un ejemplo de lo anterior pueden verse en <a href="https://github.com/MrPapasFritas/frames-days/blob/master/Demo - Target Run">éste demo</a>  
+Un ejemplo de lo anterior pueden verse en <a href="https://github.com/MrPapasFritas/frames-days/blob/master/Demo - Target Run.ipynb">éste demo</a>  
 
 En cada propagación se van guardando los datos en el historial de la maniobra:
 ```python
