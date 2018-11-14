@@ -30,7 +30,7 @@ satellite.solarPanels.efficiency = 0.4
 
 #Define maneuvers object
 maneuvers = Maneuvers(coe,satellite,date)
--```
+```
 Luego podemos agregar las perturbaciones al objeto maneuvers para agregar las perturbaciones (hasta ahora se ha implementado `atmosphere`, `solar_pressure`, `moon_gravity`, `sun_gravity`, `J2` y `thrust`)
 El método `propagate` propaga en el tiempo y acepta el tiempo en segundos, y un timestep en segundos.
 ```python
