@@ -26,3 +26,7 @@ Rm = 1.737e3
 #SUN
 Ms = 1.989e30 
 mu_S = G*Ms
+
+#OTHER
+#Universal Gas Constant R = 8.31432 J/K-mole
+R = 8.31432

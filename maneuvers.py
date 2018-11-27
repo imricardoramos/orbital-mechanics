@@ -1,7 +1,7 @@
 import numpy as np
 import coordinates, models, constants, auxiliary
 from scipy import integrate
-from datetime import timedelta
+from datetime import datetime,timedelta
 
 from mpl_toolkits.mplot3d import Axes3D
 import matplotlib.pyplot as  plt
@@ -20,6 +20,9 @@ class ManeuversHistory:
     self.propMass = None
     self.dv = None
     self.maneuverIdxs = [0]
+    self.energy = {"thruster": None,
+                   "solar panels": None,
+                   "battery": None}
 
 class Maneuvers:
 
@@ -34,7 +37,6 @@ class Maneuvers:
     self._PERTURBATION_SUN_ = 0
 
     self.spacecraft = spacecraft
-    self.startDate = startDate
 
     # Set up history to store data along maneuvers
     self.history = ManeuversHistory()
@@ -42,7 +44,10 @@ class Maneuvers:
     self.history.coe = np.array(coe)
     self.history.mee = coordinates.kep2eq(coe)
     self.history.propMass = [self.spacecraft.wetMass-self.spacecraft.dryMass]
-    self.history.datetime = startDate
+    self.history.datetime = [startDate]
+    self.history.energy["thruster"] = [0]
+    self.history.energy["solar panels"] = [0]
+    self.history.energy["battery"] = [self.spacecraft.battery.energy*60*60/2]
 
     self.history.r.shape = (1,3)
     self.history.v.shape = (1,3)
@@ -150,14 +155,12 @@ class Maneuvers:
       return np.append(np.append(-r,-v),dpropMass)
   def betts(self,y,t):
     equinoctial_coordinates = y[0:6]
-    p = equinoctial_coordinates[0]
-    f = equinoctial_coordinates[1]
-    g = equinoctial_coordinates[2]
-    h = equinoctial_coordinates[3]
-    k = equinoctial_coordinates[4]
-    L = equinoctial_coordinates[5]
-
     propMass = y[6]
+    solarPanelsEnergy = y[7]
+    thrusterEnergy = y[8]
+    batteryEnergy = y[9]
+
+    p,f,g,h,k,L = equinoctial_coordinates
     
     # Inferred Parameters
     q = 1+f*np.cos(L)+g*np.sin(L)
@@ -180,6 +183,13 @@ class Maneuvers:
         #print("equinocitalElements:"+str(equinoctial_coordinates))
         print("Day:"+str(t/60/60/24)+"\tHeight: "+str(z/1000)+" km"+"\tMass: "+str(propMass))
 
+    #Calculate Power Available
+    PSolarPanels = self.spacecraft.solarPanels.power(r,self.history.datetime[0] + timedelta(seconds=t))
+    PBattery = self.spacecraft.battery.dischargePower if batteryEnergy >= 0 else 0
+    PAvailable = PSolarPanels + PBattery
+    # Assuming other devices consume enough power to keep the battery charging very slowly
+    POtherDevices = self.spacecraft.solarPanels.nominalPower*0.9
+
     #RSW frame definition from r and v
     rhat = r/np.linalg.norm(r)
     w = np.cross(rhat,v)
@@ -191,8 +201,9 @@ class Maneuvers:
     pert = self.calculatePerturbations(t,r,v,propMass)
     DeltaP = 0;
 
+
     # THRUST PERTURBATON HAD TO BE CALCULATED HERE...
-    if self._PERTURBATION_THRUST_ and propMass > 0:
+    if self._PERTURBATION_THRUST_ and propMass > 0 and PAvailable > 0: 
       if(self.targetRun):
         alpha, beta = self.getTargetAngles(coe)
       else:
@@ -200,17 +211,27 @@ class Maneuvers:
         beta = self.thrustProfile[1](coe)
 
       mass = self.spacecraft.dryMass+propMass
-      
+      PThruster, thrust, massFlowRate = self.spacecraft.thruster.operationalParams(PAvailable-POtherDevices)
       #Thrust vectoring
       RCNThrustAngle = np.array([np.cos(beta)*np.sin(alpha),
                                  np.cos(beta)*np.cos(alpha),
                                  np.sin(beta)])
-      DeltaP = self.spacecraft.thruster.thrust/mass*RCNThrustAngle
+      DeltaP = thrust/mass*RCNThrustAngle
 
       #pert = pert + Fth 
-      dpropMass = -self.spacecraft.thruster.massFlowRate
+      dpropMass = -massFlowRate
     else:
       dpropMass = 0
+      PThruster = 0
+    
+    # Battery Balance
+    # dE = P
+    dSolarPanelsEnergy = PSolarPanels
+    dThrusterEnergy = PThruster
+    #print(PSolarPanels,PThruster,POtherDevices)
+    dBatteryEnergy = PSolarPanels-PThruster-POtherDevices
+    if (dBatteryEnergy >= 0 and batteryEnergy/60/60 >= self.spacecraft.battery.energy) or (batteryEnergy/60/60 <= 0 and dBatteryEnergy <= 0):
+      dBatteryEnergy = 0
 
     #Transform perturbations to RSW Frame
     Delta = np.dot(rsw,pert) + DeltaP
@@ -224,9 +245,9 @@ class Maneuvers:
     b = np.array([0, 0, 0, 0, 0, np.sqrt(constants.mu_E*p)*(q/p)**2])
 
     dotx = np.matmul(A,Delta) + b
-    return np.append(dotx,dpropMass)
+    return np.hstack((dotx,dpropMass,dSolarPanelsEnergy,dThrusterEnergy,dBatteryEnergy))
 
-  def propagate(self,time,timestep):
+  def propagate(self,time,timestep,**kwargs):
     print("Propagating...from day ",self.history.t[-1]/60/60/24," to ",(self.history.t[-1]+time)/60/60/24)
 
     t = np.linspace(self.history.t[-1],self.history.t[-1]+time,time/timestep)
@@ -270,10 +291,17 @@ class Maneuvers:
           coeLocalHist[idx,:] = coordinates.cart2kep(rLocalHist[idx],vLocalHist[idx])
 
       elif self.formulation == 'betts':
-        y0 = np.append(self.history.mee[-1,:],self.history.propMass[-1])
-        sol = integrate.odeint(self.betts,y0,tInt)
+        y0 = np.hstack((self.history.mee[-1,:],
+                        self.history.propMass[-1],
+                        self.history.energy["solar panels"][-1],
+                        self.history.energy["thruster"][-1],
+                        self.history.energy["battery"][-1]))
+        sol = integrate.odeint(self.betts,y0,tInt,**kwargs)
         y = sol[:,0:6] 
         propMass = sol[:,6]
+        solarPanelsEnergy = sol[:,7]
+        thrusterEnergy = sol[:,8]
+        batteryEnergy = sol[:,9]
 
         #Initialize r and v for faster stacking
         rLocalHist = np.zeros([y.shape[0],3])
@@ -291,17 +319,21 @@ class Maneuvers:
           vLocalHist[idx,:] = v
           coeLocalHist[idx,:] = coordinates.eq2kep(row)
 
-      datetime = np.array([self.startDate + timedelta(seconds=seconds) for seconds in tInt])
+      datetime = np.array([self.history.datetime[0] + timedelta(seconds=seconds) for seconds in tInt])
 
       # Update history
-      self.history.t   = np.append(self.history.t,tInt)
+      self.history.t   = np.append(self.history.t,tInt[1:])
+      self.history.coe = np.vstack((self.history.coe,coeLocalHist[1:,:]))
+      self.history.r   = np.vstack((self.history.r,rLocalHist[1:,:]))
+      self.history.v   = np.vstack((self.history.v,vLocalHist[1:,:]))
+      self.history.datetime = np.append(self.history.datetime, datetime[1:])
+      self.history.propMass = np.append(self.history.propMass,propMass[1:])
+      self.history.energy["thruster"]     = np.append(self.history.energy["thruster"],thrusterEnergy[1:])
+      self.history.energy["battery"]      = np.append(self.history.energy["battery"],batteryEnergy[1:])
+      self.history.energy["solar panels"] = np.append(self.history.energy["solar panels"],solarPanelsEnergy[1:])
+
       if self.formulation == 'betts':
-        self.history.mee = np.vstack((self.history.mee,y))
-      self.history.coe = np.vstack((self.history.coe,coeLocalHist))
-      self.history.r   = np.vstack((self.history.r,rLocalHist))
-      self.history.v   = np.vstack((self.history.v,vLocalHist))
-      self.history.propMass = np.append(self.history.propMass,propMass)
-      self.history.datetime = np.append(self.history.datetime,datetime)
+        self.history.mee = np.vstack((self.history.mee,y[1:,:]))
 
       if self.targetRun and self.useSecularCoe:
         if tPartition > t[-1]:
@@ -326,7 +358,10 @@ class Maneuvers:
       z = np.linalg.norm(r) - constants.Re
       #Atmospheric Drag
       vrel = v - np.cross(constants.wE,r)
-      Fd = -0.5*models.atmosDensity(z/1000)*np.linalg.norm(vrel)*vrel*(1/self.spacecraft.BC(self.spacecraft.dryMass+propMass))
+      #rho = models.USSA76(z)
+      rhoMin, rhoMax = models.HarrisPriester(z)
+      #rho = models.MSISE90(z,"mean")
+      Fd = -0.5*rhoMax*np.linalg.norm(vrel)*vrel*(1/self.spacecraft.BC(self.spacecraft.dryMass+propMass))
       p = p + Fd
 
     if self._PERTURBATION_J2_:
@@ -345,7 +380,7 @@ class Maneuvers:
 
     if self._PERTURBATION_SOLARPRESS_:
       #u-hat vector pointing from Sun to Earth and Sun position vector
-      uhat, rS = models.solarPosition(self.startDate+timedelta(seconds=t))
+      uhat, rS = models.solarPosition(self.history.datetime[0]+timedelta(seconds=t))
       
       #Solar Radiation Pressure
       PSR = 4.56e-6
@@ -363,17 +398,17 @@ class Maneuvers:
       else:
         nu = 0
 
-      #Radiation Pressure Coefficient (lies between 0 and 1)
-      CR = 2
+      #Radiation Pressure Coefficient (lies between 1 and 2)
+      Cr = self.spacecraft.Cr
       #Spacecraft mass
       mass = self.spacecraft.dryMass+propMass
       #Radiation Pressure acceleration
-      FR = -nu*PSR*CR*As/mass*uhat
+      FR = -nu*PSR*Cr*As/mass*uhat
 
       p = p + FR
 
     if self._PERTURBATION_MOON_:
-      r_m = models.lunarPositionAlmanac2013(self.startDate+timedelta(seconds=t))
+      r_m = models.lunarPositionAlmanac2013(self.history.datetime[0]+timedelta(seconds=t))
       r_ms = r_m-r 
       #pMoon = constants.mu_M*(r_ms/np.linalg.norm(r_ms)**3-r_m/np.linalg.norm(r_m)**3)
 
@@ -387,7 +422,7 @@ class Maneuvers:
       p = p + pMoon 
 
     if self._PERTURBATION_SUN_:
-      uhat, r_s = models.solarPosition(self.startDate+timedelta(seconds=t))
+      uhat, r_s = models.solarPosition(self.history.datetime[0]+timedelta(seconds=t))
       r_sunSat = r_s-r 
       #F(q) formula from F.3 Appendix Curtis 2013
       # 	c = b - a; a << b
@@ -454,7 +489,7 @@ class Maneuvers:
     betaOpt = np.arcsin(TOpt[2]/r)
 
     #print("alpha,beta:\n",alpha*180/np.pi,"\n",beta*180/np.pi)
-    print("weights: ",weights)
+    #print("weights: ",weights)
     #print("Tcoe: \n",Tcoe)
     #print("TOpt: ",TOpt)
     #print("alphaOpt, betaOpt: ",alphaOpt*180/np.pi,betaOpt*180/np.pi)
@@ -463,8 +498,8 @@ class Maneuvers:
     return alphaOpt,betaOpt
 
   def calculateSecularElements(self):
-    secularCoe = []
-    tSecular = []
+    self.history.secularCoe = []
+    self.history.tSecular = []
     T0 = 2*np.pi*(self.history.coe[0,0]**3/constants.mu_E)**0.5
     t = T0;
     idx0 = 0;
@@ -472,59 +507,68 @@ class Maneuvers:
     while t < self.history.t[-1]:
       #print(idx0,idxf)
       meanCoe = np.mean(self.history.coe[idx0:idxf,0:5],axis=0)
-      secularCoe = np.append(secularCoe,meanCoe,axis=0);
-      tSecular = np.append(tSecular,self.history.t[idx0])
+      self.history.secularCoe = np.append(self.history.secularCoe,meanCoe,axis=0);
+      self.history.tSecular = np.append(self.history.tSecular,self.history.t[idx0])
 
       T = 2*np.pi*(self.history.coe[idxf,0]**3/constants.mu_E)**0.5
       t = t+T
       idx0 = idxf
       idxf = (np.abs(self.history.t - t)).argmin();
-    secularCoe = np.reshape(secularCoe,(-1,5))
-    return secularCoe, tSecular
+    self.history.secularCoe = np.reshape(self.history.secularCoe,(-1,5))
 
 #------------------------------------------------------------------------
   def plot(self, item, itemHistory=None,**kwargs):
+    useDate = False
+    for key in kwargs:
+      if key == "useDate":
+        useDate = kwargs[key]
+
     if item == "coe":
       # PLOTTING CLASSICAL ORBITAL ELEMENTS
       titles = ["a","e","i","$\omega$","$\Omega$","$\\nu$"]
       ylabels = ["[km]", "", "[°]", "[°]", "[°]", "[°]"]
-      fig, axes = plt.subplots(3,2,figsize=(10,8))
+      timeAxis = self.history.datetime if useDate else self.history.t/60/60/24
+      fig, axes = plt.subplots(3,2,figsize=(10,8),sharex=True)
       for i in range(0,6):
         for j in range(0,len(self.history.maneuverIdxs)-1):
           maneuverSlice = slice(self.history.maneuverIdxs[j],self.history.maneuverIdxs[j+1])
           if i in [2,3,4,5]:
-            axes[int((i-i%2)/2),i%2].plot(self.history.datetime[maneuverSlice],self.history.coe[maneuverSlice,i]*180/np.pi)
+            axes[int((i-i%2)/2),i%2].plot(timeAxis[maneuverSlice],self.history.coe[maneuverSlice,i]*180/np.pi)
           else:
             if i == 0:
-              axes[int((i-i%2)/2),i%2].plot(self.history.datetime[maneuverSlice],self.history.coe[maneuverSlice,i]/1000)
+              axes[int((i-i%2)/2),i%2].plot(timeAxis[maneuverSlice],self.history.coe[maneuverSlice,i]/1000)
             else:
-              axes[int((i-i%2)/2),i%2].plot(self.history.datetime[maneuverSlice],self.history.coe[maneuverSlice,i])
+              axes[int((i-i%2)/2),i%2].plot(timeAxis[maneuverSlice],self.history.coe[maneuverSlice,i])
           axes[int((i-i%2)/2),i%2].set_title(titles[i]+" "+ylabels[i])
           
+        if useDate:
           fig.autofmt_xdate()
           axes[int((i-i%2)/2),i%2].xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
-          axes[int((i-i%2)/2),i%2].yaxis.get_major_formatter().set_scientific(False)
-          axes[int((i-i%2)/2),i%2].yaxis.get_major_formatter().set_useOffset(False)
-          axes[int((i-i%2)/2),i%2].grid(b=True)
+        else:
+          for i in range(4,6):
+            axes[int((i-i%2)/2),i%2].set_xlabel("Time [days]")
+        axes[int((i-i%2)/2),i%2].yaxis.get_major_formatter().set_scientific(False)
+        axes[int((i-i%2)/2),i%2].yaxis.get_major_formatter().set_useOffset(False)
+        axes[int((i-i%2)/2),i%2].grid(b=True)
     if item == "secularCoe":
       # PLOTTING CLASSICAL ORBITAL ELEMENTS
       titles = ["a","e","i","$\omega$","$\Omega$","$\\nu$"]
       ylabels = ["[km]", "", "[°]", "[°]", "[°]", "[°]"]
-      fig, axes = plt.subplots(3,2,figsize=(10,8))
-      for i in range(0,6):
-        for j in range(0,len(self.history.maneuverIdxs)-1):
-          maneuverSlice = slice(self.history.maneuverIdxs[j],self.history.maneuverIdxs[j+1])
-          if i in [2,3,4,5]:
-            axes[int((i-i%2)/2),i%2].plot(self.history.datetime[maneuverSlice],self.history.coe[maneuverSlice,i]*180/np.pi)
+      timeAxis = self.history.datetime if useDate else self.history.tSecular/60/60/24
+      fig, axes = plt.subplots(3,2,figsize=(10,8),sharex=True)
+      for i in range(0,5):
+          if i in [2,3,4]:
+            axes[int((i-i%2)/2),i%2].plot(timeAxis,self.history.secularCoe[:,i]*180/np.pi)
           else:
             if i == 0:
-              axes[int((i-i%2)/2),i%2].plot(self.history.datetime[maneuverSlice],self.history.coe[maneuverSlice,i]/1000)
+              axes[int((i-i%2)/2),i%2].plot(timeAxis,self.history.secularCoe[:,i]/1e3)
             else:
-              axes[int((i-i%2)/2),i%2].plot(self.history.datetime[maneuverSlice],self.history.coe[maneuverSlice,i])
+              axes[int((i-i%2)/2),i%2].plot(timeAxis,self.history.secularCoe[:,i])
           axes[int((i-i%2)/2),i%2].set_title(titles[i]+" "+ylabels[i])
           
-          fig.autofmt_xdate()
-          axes[int((i-i%2)/2),i%2].xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
+          if(useDate):
+            fig.autofmt_xdate()
+            axes[int((i-i%2)/2),i%2].xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
           axes[int((i-i%2)/2),i%2].yaxis.get_major_formatter().set_scientific(False)
           axes[int((i-i%2)/2),i%2].yaxis.get_major_formatter().set_useOffset(False)
           axes[int((i-i%2)/2),i%2].grid(b=True)
@@ -589,20 +633,43 @@ class Maneuvers:
         #fig, ax = plt.subplots(figsize=(10,4))
         #ax.plot(self.history.datetime,moonDistances);
 
+    if item == "energyUsage":
+      timeAxis = self.history.datetime if useDate else self.history.t/60/60/24
+      fig, ax = plt.subplots(figsize=(10,4))
+      ax.plot(timeAxis[1:-1], np.diff(self.history.energy["solar panels"][1:])/np.diff(self.history.t[1:]),linewidth=1,label="Solar Panels")
+      ax.plot(timeAxis[1:-1], np.diff(self.history.energy["thruster"][1:])/np.diff(self.history.t[1:]),linewidth=1,label="Thruster")
+      ax.plot(timeAxis[1:-1], np.diff(self.history.energy["battery"][1:])/np.diff(self.history.t[1:]),linewidth=1,label="Battery")
+
+      if useDate:
+        fig.autofmt_xdate()
+        ax.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
+      else:
+        ax.set_xlabel("Time [days]")
+      ax.yaxis.set_major_formatter(mticker.ScalarFormatter())
+      ax.yaxis.get_major_formatter().set_scientific(False)
+      ax.yaxis.get_major_formatter().set_useOffset(False)
+      plt.grid()
+      plt.legend()
+      mplcursors.cursor(hover=True)
+
     if item == "singleItem":
+      timeAxis = self.history.datetime if useDate else self.history.t/60/60/24
       if np.isscalar(itemHistory) and itemHistory == None:
         raise Exception("History Data not specified.")
       else:
         fig, ax = plt.subplots(figsize=(10,4))
         for i in range(0,len(self.history.maneuverIdxs)-1):
-            maneuverSlice = slice(self.history.maneuverIdxs[i],self.history.maneuverIdxs[i+1])
-            ax.plot(self.history.datetime[maneuverSlice], itemHistory[maneuverSlice],linewidth=1)
+          maneuverSlice = slice(self.history.maneuverIdxs[i],self.history.maneuverIdxs[i+1])
+          ax.plot(timeAxis[maneuverSlice], itemHistory[maneuverSlice],linewidth=1)
 
-        fig.autofmt_xdate()
-        ax.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
-        ax.yaxis.set_major_formatter(mticker.ScalarFormatter())
-        ax.yaxis.get_major_formatter().set_scientific(False)
-        ax.yaxis.get_major_formatter().set_useOffset(False)
+        if useDate:
+          fig.autofmt_xdate()
+          ax.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
+          ax.yaxis.set_major_formatter(mticker.ScalarFormatter())
+          ax.yaxis.get_major_formatter().set_scientific(False)
+          ax.yaxis.get_major_formatter().set_useOffset(False)
+        else:
+          ax.set_xlabel("Time [days]")
         plt.grid()
         mplcursors.cursor(hover=True)
   def ipvPlot3D(self,**kwargs):
@@ -677,14 +744,34 @@ class Maneuvers:
   def makeReport(self):
     report =  "------------MANEUVER REPORT-------------\n"
     report += "----INITIAL CONDITIONS----\n"
-    report += "Spacecraft:\n"
+    report += "Date/Time:\n"
+    report += "  Initial Date: "+self.history.datetime[0].strftime("%Y-%m-%d %H:%M:%S")+"\n";
+    report += "\nSpacecraft:\n"
     report += "  Wet Mass: \t\t"+str(self.spacecraft.wetMass)+" kg\n"
     report += "  Dry Mass: \t\t"+str(self.spacecraft.dryMass)+" kg\n"
     report += "  Propellant Mass: \t"+str(self.spacecraft.wetMass-self.spacecraft.dryMass)+" kg\n";
-    report += "  Area: \t\t"+str(self.spacecraft.area)+" m2\n";
+    report += "  Drag Area: \t\t"+str(self.spacecraft.area)+" m2\n";
     report += "  Cd: \t\t\t"+str(self.spacecraft.Cd)+"\n";
-    #report += "\t Cr:"+str(self.spacecraft.Cr);
-    report += "Orbit:\n"
+    report += "  Cr: \t\t\t"+str(self.spacecraft.Cr)+"\n";
+    report += "\nThruster:\n"
+    report += "  Name/Model:\t\t"+str(self.spacecraft.thruster.name)+"\n";
+    report += "  Thrust (nominal):\t"+str(self.spacecraft.thruster.thrust)+" N\n";
+    report += "  Isp (nominal):\t"+str(self.spacecraft.thruster.isp)+" s\n";
+    report += "  Power (nominal):\t"+str(self.spacecraft.thruster.power)+" W\n";
+    report += "\nSolar Panels:\n"
+    report += "  Name/Model:\t\t\t"+str(self.spacecraft.solarPanels.name)+"\n";
+    report += "  Number of Panels:\t\t"+str(self.spacecraft.solarPanels.n)+"\n";
+    report += "  Individual Area:\t\t"+str(self.spacecraft.solarPanels.area)+" m2\n";
+    report += "  Total Power (nominal):\t"+str(self.spacecraft.solarPanels.nominalPower)+" W\n";
+    report += "\nBattery:\n"
+    report += "  Name/Model:\t\t"+str(self.spacecraft.battery.name)+"\n";
+    report += "  Cells Configuration:\t"+str(self.spacecraft.battery.P)+"P-"+str(self.spacecraft.battery.S)+"S\n";
+    report += "  Voltage:\t\t"+str(self.spacecraft.battery.voltage)+" V\n";
+    report += "  Capacity:\t\t"+str(self.spacecraft.battery.capacity)+" mAh\n";
+    report += "  Energy:\t\t"+str(self.spacecraft.battery.energy)+" Wh\n";
+    report += "  Charge Power:\t\t"+str(self.spacecraft.battery.chargePower)+" W\n"
+    report += "  Discharge Power:\t"+str(self.spacecraft.battery.dischargePower)+" W\n"
+    report += "\nOrbit:\n"
     report += "  Semi-major axis (a): \t\t"+str(self.history.coe[0,0]/1e3)+" km\n"
     report += "  Eccentricity (e): \t\t"+str(round(self.history.coe[0,1],6))+"\n"
     report += "  Inclination (i): \t\t"+str(self.history.coe[0,2]*180/np.pi)+" deg\n"
@@ -693,12 +780,17 @@ class Maneuvers:
     report += "  True Anomaly (nu): \t\t"+str(round(self.history.coe[0,5]*180/np.pi,5))+" deg\n"
     
     
+    # Report at the end of each stage
     for idx in range(1,len(self.history.maneuverIdxs)-1):
       maneuverIdx = self.history.maneuverIdxs[idx]
       report += "\n----STAGE "+str(idx)+"----\n";
-      report += "Spacecraft:\n"
+      report += "Date/Time:\n"
+      deltatime = self.history.datetime[maneuverIdx]-self.history.datetime[0]
+      report += "  Elapsed Time:\t"+str(deltatime)+"\n";
+      report += "  Date at end of stage:\t"+self.history.datetime[maneuverIdx].strftime("%Y-%m-%d %H:%M:%S")+"\n";
+      report += "\nSpacecraft:\n"
       report += "  Propellant Mass: \t"+str(self.history.propMass[maneuverIdx])+" kg\n";
-      report += "Orbit:\n"
+      report += "\nOrbit:\n"
       report += "  Semi-major axis (a): \t\t"+str(self.history.coe[maneuverIdx,0]/1e3)+" km\n"
       report += "  Eccentricity (e): \t\t"+str(round(self.history.coe[maneuverIdx,1],6))+"\n"
       report += "  Inclination (i): \t\t"+str(self.history.coe[maneuverIdx,2]*180/np.pi)+" deg\n"
@@ -707,9 +799,13 @@ class Maneuvers:
       report += "  True Anomaly (nu): \t\t"+str(round(self.history.coe[maneuverIdx,5]*180/np.pi,5))+" deg\n"
 
     report += "\n----FINAL CONDITIONS----\n";
-    report += "Spacecraft:\n"
+    report += "Date/Time:\n"
+    deltatime = self.history.datetime[-1]-self.history.datetime[0]
+    report += "  Elapsed Time:\t"+str(deltatime)+"\n";
+    report += "  End Date:\t"+self.history.datetime[-1].strftime("%Y-%m-%d %H:%M:%S")+"\n";
+    report += "\nSpacecraft:\n"
     report += "  Propellant Mass: \t"+str(self.history.propMass[-1])+" kg\n";
-    report += "Orbit:\n"
+    report += "\nOrbit:\n"
     report += "  Semi-major axis (a): \t\t"+str(self.history.coe[-1,0]/1e3)+" km\n"
     report += "  Eccentricity (e): \t\t"+str(round(self.history.coe[-1,1],6))+"\n"
     report += "  Inclination (i): \t\t"+str(self.history.coe[-1,2]*180/np.pi)+" deg\n"

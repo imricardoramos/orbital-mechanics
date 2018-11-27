@@ -16,7 +16,7 @@ Si se escoge utilizar un propulsor o paneles solares es necesario definirlos en 
 
 Éstos parámetros son pasados al constructor del objeto `Maneuvers`, para definir el estado inicial de la maniobra.
 ```python
-coe,date = helpers.parseTle("suchai0.tle")
+coe,date = auxiliary.parseTle("suchai0.tle")
 # Spacecraft Definition
 satellite = models.Cubesat("3U")
 
