@@ -12,7 +12,8 @@ En primer lugar se debe declarar el modelo de <i>spacecraft</i>, los elementos o
 Si bien en el ejemplo de abajo se obtienen a partir de un TLE, se pueden definir manualmente.
 `coe` corresponde a los elementos orbitales expresados de manera kepleriana y en una lista de orden `[a,e,i,omega,Omega,nu]`. La fecha simplemente es un `datetime`.  
 
-Si se escoge utilizar un propulsor o paneles solares es necesario definirlos en `Spacecraft.thruster` y `Spacecraft.solarPanels`, ambos pueden ser definidos de manera genérica mediante `models.Thruster` y `models.solarPanels`,respectivamente, o bien mediante un modelo que haya disponible en <i>models.py</i>.  
+Por defecto, el modelo de `Spacecraft` define internamente una configuración de propulsor, paneles solares y batería.
+Si se escoge utilizar un propulsor, paneles solares, o baterías es necesario definirlos en `Spacecraft.thruster`, `Spacecraft.solarPanels`, ambos pueden ser definidos de manera genérica mediante `models.Thruster`, `models.solarPanels` y `models.Battery`respectivamente, o bien mediante un modelo que haya disponible en <i>models.py</i>.  
 
 Éstos parámetros son pasados al constructor del objeto `Maneuvers`, para definir el estado inicial de la maniobra.
 ```python
@@ -23,12 +24,15 @@ satellite = models.Cubesat("3U")
 # Thruster Definition (1mN thrust, 720s Isp)
 satellite.thruster = models.Thruster(thrust=1e-3,isp=720)
 
-#Solar Panels Definition
+# Solar Panels Definition
 satellite.solarPanels = models.solarPanel()
 satellite.solarPanels.area = 30e-2*30e-2
 satellite.solarPanels.efficiency = 0.4
 
-#Define maneuvers object
+# Battery Definition
+satellite.battery = models.NanoPowerBP4("2S-2P")
+
+# Define maneuvers object
 maneuvers = Maneuvers(coe,satellite,date)
 ```
 Luego podemos agregar las perturbaciones al objeto maneuvers para agregar las perturbaciones (hasta ahora se ha implementado `atmosphere`, `solar_pressure`, `moon_gravity`, `sun_gravity`, `J2` y `thrust`)
