@@ -1,21 +1,25 @@
-# Modelamiento de dinámica orbital de cubesat 3U para determinación de costos propulsivos, energéticos y temporales en maniobras orbitales de bajo empuje predeterminados
-### Explicación del código implementado a la fecha:
-Se han implementado 5 archivos:
-- <strong>constants.py:</strong> en éste código se definen todas las constantes a ser usadas en el resto del código como las constantes gravitacionales estándares de la Tierra, el Sol y la Luna, el radio de la Tierra, la constante de gravedad y las masas de la Tierra, la Luna y el Sol, entre otras.
-- <strong>coordinates.py:</strong> en éste código se definen funciones que son de ayuda para transformar las coordenadas de keplerianas a cartesianas, de cartesianas a keplerianas, de keplerianas a equinocciales, de equinocciales a keplerianas, de cartesianas a queinocciales y de equinocciales a cartesianas.
-- <strong>models.py:</strong> en éste código se definen clases y funciones que conforman los modelos físicos a utilizar, como por ejemplo el modelo de densidad atmosférica, el modelo de posición lunar y solar, y finalmente los modelos utilizados en el satélite, como los modelos de propulsores, los modelos de paneles solares, baterías, energía y los modelos de satélite en sí (incorporando cosas como masa, coeficiente balístico, etc). La idea es que acá se vayan agregando los modelos que sean distintos o más complejos en el tiempo.
-- <strong>maneuvers.py:</strong> en éste código se encuentra las funciones que realizan el trabajo de calcular la dinámica orbital, y las funciones con las que interactúa el usuario para poder añadir las perturbaciones que desee y propagar el movimiento por el tiempo que se desee. En éste caso también se definen varios métodos de integración del movimiento del satélite, como el método de Conwell, el de Gauss y el de Betts. Un objeto `Maneuver`, va calculando la trayectoria aplicada sobre él y guardandola en un historial que sirve para ser utilizado más tarde.
-- <strong>auxiliary.py:</strong> en éste código se definen funciones auxiliares o misceláneas que tienen como propósito facilitar la interacción del usuario. En este momento sólo se tiene un extractor de elementos a partir de un TLE y una funcíón para facilitar la mantención del aspect ratio al graficar en 3D.
+# Modelling of the orbital mechanics of a 3U cubesat for the determination of propulsive, energetic and temporary costs in predetermined low thrust orbital maneuvers.
+If you want, you can checkout <a href="https://ricardoramos.me/orbital-mechanics-simulator">the blog entry I wrote fot this project.<a>
+    
+### Explanation of the code written so far:
+There are 5 files:
+- <strong>constants.py:</strong> contains all the constants used in the rest of the code, like the standard gravitational constants of the Earth, the Moon and the Sun, the radius of the Earth, the gravitational constant and the masses of the Earth, the Moon and the Sun, among others.
+- <strong>coordinates.py:</strong> contains functions which help in the transfomation of coordinates, from keplerian to cartesian, cartesian to equinoctial and equinoctial to cartesian.
+- <strong>models.py:</strong> contains classes and functions which represent the physical models for use. For example the atmospheric density model, the lunar and solar positioning and finally the models used in the satellite units, like the thrusters, the solar panels, batteries, energy balance and even the satellite itself (incorporating stuff like mass, ballistic coefficient, etc). The idea is to keep adding models which are diverse and more complex over time.
+- <strong>maneuvers.py:</strong> this is the core of the simulator and contains the functions which do the job of calculating the actual orbital dynamics, and the functions which the user interacts with to be able to add and remove perturbations, and propagate movement over time. In this case various methods of integration for the movement of the satellite have been defined, like the Cowell's method, Gauss with equinoctial coordinates (which I call Betts). The `Maneuver` object calculates the trajectory and logs it in a history class which can be further used.
+- <strong>auxiliary.py:</strong> contains auxiliary or miscellaneous functions which don't classify under the other files. At the moment it only has an orbital elements extractor from a TLE, and a function to aid in keeping the aspect ratio of the 3D plot.
 
-### Modo de uso:
-En primer lugar se debe declarar el modelo de <i>spacecraft</i>, los elementos orbitales asociados a él y la fecha a la cual pertenecen dichos elementos orbitales.
-Si bien en el ejemplo de abajo se obtienen a partir de un TLE, se pueden definir manualmente.
-`coe` corresponde a los elementos orbitales expresados de manera kepleriana y en una lista de orden `[a,e,i,omega,Omega,nu]`. La fecha simplemente es un `datetime`.  
+### Usage:
+You must first declare the spacecraft model you wish to use, the initial orbital elements and the date they correspond to.
+The example below defines the from a TLE, but they can be manually defined.
+`coe` are the orbital elements expressed in keplerian form and in a list of the form `[a,e,i,omega,Omega,nu]`. 
+The date is simply a `datetime` object.
 
-Por defecto, el modelo de `Spacecraft` define internamente una configuración de propulsor, paneles solares y batería.
-Si se escoge utilizar un propulsor, paneles solares, o baterías es necesario definirlos en `Spacecraft.thruster`, `Spacecraft.solarPanels`, ambos pueden ser definidos de manera genérica mediante `models.Thruster`, `models.solarPanels` y `models.Battery`respectivamente, o bien mediante un modelo que haya disponible en <i>models.py</i>.  
+The `Spacecraft` model internally defines a configuration for the thrusters, solar panels and batteries.
+If you choose to use the thrusters, solar panels or batteries, you have to define the n in `Spacecraft.thruster`, `Spacecraft.solarPanles` and `Spacecraft.battery`. These can all be defined generically with `models.Thruster`, `models.solarPanels` and `models.Battery`, or any available model in <i>models.py</i>.
 
-Éstos parámetros son pasados al constructor del objeto `Maneuvers`, para definir el estado inicial de la maniobra.
+All these parameters are passed to the constructor of the `Maneuvers` object to define the initial state of the maneuver:
+
 ```python
 coe,date = auxiliary.parseTle("suchai0.tle")
 # Spacecraft Definition
@@ -35,8 +39,8 @@ satellite.battery = models.NanoPowerBP4("2S-2P")
 # Define maneuvers object
 maneuvers = Maneuvers(coe,satellite,date)
 ```
-Luego podemos agregar las perturbaciones al objeto maneuvers para agregar las perturbaciones (hasta ahora se ha implementado `atmosphere`, `solar_pressure`, `moon_gravity`, `sun_gravity`, `J2` y `thrust`)
-El método `propagate` propaga en el tiempo y acepta el tiempo en segundos, y un timestep en segundos.
+We can then add the perturbations to the maneuvers object (so far only `atmosphere`, `solar_pressure`, `moon_gravity`, `sun_gravity`, `J2` and `thrust` have been implemented).
+The `propagate` method propagates the time and accepts time in seconds, with a timestep in seconds.
 ```python
 # Add solar pressure and atmospheric drag perturbations to maneuver
 maneuvers.addPerturbation("solar_pressure")
@@ -52,8 +56,8 @@ maneuvers.removePerturbation("thrust")
 # Propagate for 1 day
 maneuvers.propagate(60*60*24*1, 60)
 ```
-Para orientar el empuje es posible definir funciones de callback que acepten `coe` (Classical Orbital Elements) como entrada, y entreguen ángulos `alpha` y `beta` de orientación definidos en el sistema de referencia RSW (también llamado RCN) del satélite:
-<img src="misc/rswFrame.png"/>
+To orient thrust, it is possible to define callback functions which accept `coe` (Classical Orbital Elements) as input, and output angles `alpha` and `beta` which define the orientation in the RSW reference system (also called RCN) of the satellite:
+<img src="rswFrame.png"/>
 ```python
 def alphaCallback(coe):
     # Alpha is such that is always pointing in the direction of velocity
@@ -70,9 +74,9 @@ maneuver.addPerturbation("thrust")
 maneuver.thrustProfile = (alphaCallback,betaCallback)
 maneuver.propagate(60*60*24*10,60)
 ```
-Varios ejemplos de lo anterior pueden verse en <a href="https://github.com/MrPapasFritas/frames-days/blob/master/Demo - Single Orbital Parameter Modification.ipynb">éste demo</a>  
+You can checkout many examples of the above in <a href="https://github.com/MrPapasFritas/frames-days/blob/master/Demo - Single Orbital Parameter Modification.ipynb">this demo</a>.
 
-También se ha implementado un método para imponer una órbita objetivo y que el empuje sea calculado de manera de llegar a aquella órbita:
+I've also implemented a method to define a target orbit and let the thrust orientation be calculated in order to reach that target orbit:
 ```python
 # Add thrust
 maneuvers.addPerturbation("thrust")
@@ -82,9 +86,9 @@ maneuvers.setTargetOrbit(targetOrbitElements)
 # Propagate for 18 days
 maneuvers.propagate(60*60*24*18, 60)
 ```
-Un ejemplo de lo anterior pueden verse en <a href="https://github.com/MrPapasFritas/frames-days/blob/master/Demo - Target Run.ipynb">éste demo</a>  
+An example of the above can be seen in <a href="https://github.com/imricardoramos/orbital-mechanics/blob/master/Notebooks/Demos/Demo - Target Run.ipynb">this demo</a>  
 
-En cada propagación se van guardando los datos en el historial de la maniobra:
+In each propagation the data is saved in the histiry of the maneuver:
 ```python
 # Spacecraft distance vectors from Earth Center
 maneuvers.history.r
@@ -101,27 +105,27 @@ maneuvers.history.t
 # Datetime history
 maneuvers.history.datetime
 ```
-Además existen variables que pueden ser calculadas a posteriori, como por ejemplo:
+Some variables can also be calculated a posteriori, for example:
 ```python
 maneuvers.calculateEclipseHours()
 maneuvers.calculatePower()
 ```
-Algunos ejemplos de uso:  
+Some examples of usage: 
 
-<strong>Nota: varios de los ejemplos utilizan la librería `ipyvolume` para graficar en 3D. Es muy recomendado intentar instalar esta librería.</strong>
-- <a href="https://github.com/MrPapasFritas/frames-days/blob/master/Demo - Deorbiting.ipynb">Demo - Deorbiting</a>
-- <a href="https://github.com/MrPapasFritas/frames-days/blob/master/Demo - Inclination Change.ipynb">Demo - Inclination Change</a>
-- <a href="https://github.com/MrPapasFritas/frames-days/blob/master/Demo - Perturbations.ipynb">Demo - Perturbations</a>
-- <a href="https://github.com/MrPapasFritas/frames-days/blob/master/Demo - Eclipse.ipynb">Demo - Eclipse</a>
-- <a href="https://github.com/MrPapasFritas/frames-days/blob/master/Demo - Energy.ipynb">Demo - Energy</a>
-- <a href="https://github.com/MrPapasFritas/frames-days/blob/master/Demo - Relative Motion.ipynb">Demo - Relative Motion</a>
-- <strong><a href="https://github.com/MrPapasFritas/frames-days/blob/master/Demo - Single Orbital Parameter Modification.ipynb">Demo - Single Orbital Parameter Modification</a></strong>
-- <a href="https://github.com/MrPapasFritas/frames-days/blob/master/Demo - Target Run.ipynb">Demo - Target Run</a>
-- <a href="https://github.com/MrPapasFritas/frames-days/blob/master/Validation - Perturbations.ipynb">Validation - Perturbations</a>
-- <a href="https://github.com/MrPapasFritas/frames-days/blob/master/Validation - STK.ipynb">Validation - STK</a>
-- <a href="https://github.com/MrPapasFritas/frames-days/blob/master/Calculations - Delta-V.ipynb">Calculations - Delta-V</a>
+<strong>Note: many of the examples below use the `ipyvolume` to create 3D plots. It is very recommended to try and install this library.</strong>
+- <a href="https://github.com/imricardoramos/orbital-mechanics/blob/master/Notebooks/Demos/Demo - Deorbiting.ipynb">Demo - Deorbiting</a>
+- <a href="https://github.com/imricardoramos/orbital-mechanics/blob/master/Notebooks/Demos/Demo - Inclination Change.ipynb">Demo - Inclination Change</a>
+- <a href="https://github.com/imricardoramos/orbital-mechanics/blob/master/Notebooks/Demos/Demo - Perturbations.ipynb">Demo - Perturbations</a>
+- <a href="https://github.com/imricardoramos/orbital-mechanics/blob/master/Notebooks/Demos/Demo - Eclipse.ipynb">Demo - Eclipse</a>
+- <a href="https://github.com/imricardoramos/orbital-mechanics/blob/master/Notebooks/Demos/Demo - Energy.ipynb">Demo - Energy</a>
+- <a href="https://github.com/imricardoramos/orbital-mechanics/blob/master/Notebooks/Demos/Demo - Relative Motion.ipynb">Demo - Relative Motion</a>
+- <strong><a href="https://github.com/imricardoramos/orbital-mechanics/blob/master/Notebooks/Demos/Demo - Single Orbital Parameter Modification.ipynb">Demo - Single Orbital Parameter Modification</a></strong>
+- <a href="https://github.com/imricardoramos/orbital-mechanics/blob/master/Notebooks/Demos/Demo - Target Run.ipynb">Demo - Target Run</a>
+- <a href="https://github.com/imricardoramos/orbital-mechanics/blob/master/Notebooks/Validation/Validation - Perturbations.ipynb">Validation - Perturbations</a>
+- <a href="https://github.com/imricardoramos/orbital-mechanics/blob/master/Notebooks/Validation/Validation - STK.ipynb">Validation - STK</a>
+- <a href="https://github.com/imricardoramos/orbital-mechanics/blob/master/Notebooks/Demos/Calculations - Delta-V.ipynb">Calculations - Delta-V</a>
 
-Estudios más concretos:
-- <a href="https://github.com/MrPapasFritas/frames-days/blob/master/Study - Station Keeping.ipynb">Study - Station Keeping</a>
-- <a href="https://github.com/MrPapasFritas/frames-days/blob/master/Study - Deorbiting.ipynb">Study - Deorbiting</a>
-- <a href="https://github.com/MrPapasFritas/frames-days/blob/master/Study - Orbiting bodies.ipynb">Study - Orbiting Bodies</a>
+Some studies I attempted:
+- <a href="https://github.com/imricardoramos/orbital-mechanics/blob/master/Notebooks/Studies/Study - Station Keeping.ipynb">Study - Station Keeping</a>
+- <a href="https://github.com/imricardoramos/orbital-mechanics/blob/master/Notebooks/Studies/Study - Deorbiting.ipynb">Study - Deorbiting</a>
+- <a href="https://github.com/imricardoramos/orbital-mechanics/blob/master/Notebooks/Studies/Study - Orbiting bodies.ipynb">Study - Orbiting Bodies</a>
