@@ -1,5 +1,5 @@
 # Modelling of the orbital mechanics of a 3U cubesat for the determination of propulsive, energetic and temporary costs in predetermined low thrust orbital maneuvers.
-If you want, you can checkout <a href="https://ricardoramos.me/orbital-mechanics-simulator">the blog entry I wrote fot this project.<a>
+If you want, you can checkout <a href="https://ricardoramos.me/orbital-mechanics-simulator">the blog entry I wrote for this project.<a>
     
 ### Explanation of the code written so far:
 There are 5 files:
